@@ -148,6 +148,7 @@
             // --- 每日詳細行程 ---
             itinerary: [
                 { id: "day1", date: "12/27", dayOfWeek: "六", location: "大阪 ➔ 滋賀", weather: "sunny", temp: "9°C", items: [
+                    { type: "image", src: "Money.jpg", title: "Money" },
                     { type: "ticket", title: "南海二日券", note: "交通票券" },
                     { type: "transport", time: "11:15", title: "搭乘 CX564 飛往大阪", note: "預計 14:55 抵達關西機場 T1。下機後請加速通關，目標 15:40 領到行李。" },
                     { type: "visit", time: "16:00", title: "臨空城觀光案內所", tag: "收集", note: "營業時間: 09:00–20:00 (通常無休)。【優先】位於「臨空城車站」改札口外。務必先領取人孔蓋卡，建議趁天亮處理。", mapUrl: "https://maps.app.goo.gl/AFLxB4tBLNV1DPb79", bookingUrl: "https://www.kankou-izumisano.jp/50on/ka/1565835676276.html", starUrl: "https://www.city.izumisano.lg.jp/kakuka/jogesuidokyoku/jogesui/menu/1511934914176.html" },
@@ -319,6 +320,7 @@
                    
                 ]},
                 { id: "day16", date: "1/11", dayOfWeek: "日", location: "大阪 ➔ 台北", weather: "cloudy", temp: "9°C", items: [
+                    { type: "image", src: "Money.jpg", title: "Money" },
                     { type: "transport", time: "14:00", title: "抵達關西機場", note: "前往 T1 辦理登機手續。最後整理行李。", mapUrl: null },
                     { type: "transport", time: "16:15", title: "搭乘 CX565 返台", note: "預計 18:30 抵達台北。再見關西！" }
                 ]},
@@ -341,7 +343,7 @@
                 { name: "守山市駅前総合案内所", region: "滋賀", hours: "07:30–19:30 (每日)", url: "https://www.city.moriyama.lg.jp/kurashitetsuzuki/jougesuido/1001701/1008797.html" },
                 { name: "道の駅 草津", region: "滋賀", hours: "09:00–18:00 (每日)", url: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html" },
                 { name: "八日市駅前観光交流施設", region: "滋賀", hours: "10:00–17:00 (每日)", url: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1009690.html" },
-                { name: "東近江市役所 守衛室", region: "滋賀", hours: "10:00–16:00 (土日祝)", url: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1008976.html" },
+                { name: "東近江市役所 守衛室", region: "滋賀", hours: "10:00–16:00 (土日祝)", url: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1009690.html" },
                 { name: "彥根市上下水道料金お客様サービスセンター", region: "滋賀", hours: "09:00–17:00 (平日)", url: "https://www.city.hikone.lg.jp/kakuka/jogesuido/2/2219.html" },
                 { name: "ひこね食賓館四番町ダイニング", region: "滋賀", hours: "10:00–17:00 (每日)", url: "https://www.city.hikone.lg.jp/kakuka/jogesuido/2/2219.html" },
                 { name: "「道の駅 海の京都 宮津」観光案内所", region: "京都", hours: "09:00–17:30 (每日)", url: "https://www.pref.kyoto.jp/gesuido/manholemiyazu.html" },
@@ -570,6 +572,10 @@
         };
 
         function renderItineraryItem(item) {
+            if (item.type === 'image') {
+                return `<div class="mb-4 rounded-xl overflow-hidden shadow-sm border border-stone-200"><img src="${item.src}" alt="${item.title || 'Image'}" class="w-full h-auto object-cover" /></div>`;
+            }
+
             let iconName = 'map-pin', iconColor = "text-stone-400", borderColor = "border-stone-200";
             let isEmoji = false;
 
@@ -893,8 +899,4 @@
         document.addEventListener('DOMContentLoaded', updateView);
     </script>
 </body>
-
 </html>
-
-
-

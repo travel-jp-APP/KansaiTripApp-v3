@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <!-- 設定視窗寬度與縮放，確保在行動裝置上的顯示效果 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Kansai Trip 2025-2026</title>
+    
+    <!-- iOS Web App 相關設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Kansai Trip"> 
+    
+    <link rel="apple-touch-icon" href="Japan.jpg">
+    <link rel="icon" href="Japan.jpg">
+    
+    <!-- 引入 Tailwind CSS 框架 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts 字型 -->
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+    <!-- 引入 Lucide 圖示庫 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* --- 全域樣式設定 --- */
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 防止整個頁面捲動，由內部容器處理 */
+            position: fixed;  /* 固定定位以避免 iOS 彈性捲動效果影響 */
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #d6d3d1; /* 背景色：石灰色 */
+            color: #1c1917; /* 文字色：深石灰色 */
+            overscroll-behavior: none; /* 禁止過度捲動行為 */
+        }
+
+        /* 允許特定容器在 iOS 上有慣性捲動 */
+        #main-content, #date-scroller { -webkit-overflow-scrolling: touch; }
+
+        /* 隱藏捲動條的實用類別 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 定義淡入向上動畫 */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up, .animate-fade-in { animation: fadeInUp 0.4s ease-out forwards; }
+        
+        /* 處理 iPhone 底部安全區域 */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body>
+    <!-- 主應用程式容器 -->
+    <div class="h-[100dvh] flex flex-col md:max-w-md md:mx-auto shadow-2xl overflow-hidden relative select-none bg-stone-300">
+        
+        <!-- 背景圖片層 -->
+        <div class="fixed inset-0 z-0 pointer-events-none md:max-w-md md:mx-auto">
+            <img src="Shirahige Jinja.jpg" alt="Background" class="w-full h-full object-cover opacity-90"/>
+            <!-- 背景模糊遮罩 -->
+            <div class="absolute inset-0 bg-stone-300/85 backdrop-blur-[2px]"></div>
+        </div>
+
+        <!-- 頂部導航列 (Header) -->
+        <div class="shrink-0 bg-white/80 backdrop-blur-md border-b border-stone-200/50 shadow-sm z-50">
+            <div class="px-4 py-3 flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-black tracking-tighter text-indigo-900">KANSAI TRIP</h1>
+                    <p class="text-xs text-stone-400 font-medium tracking-widest">DEC 27 - JAN 11</p>
+                </div>
+                <!-- 動態狀態顯示區 (天氣/地點) -->
+                <div id="header-status" class="hidden flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-full border border-stone-100"></div>
+            </div>
+            
+            <!-- 日期捲軸容器 -->
+            <div id="date-scroller-container" class="hidden">
+                <div id="date-scroller" class="flex overflow-x-auto gap-3 px-4 pb-3 no-scrollbar snap-x"></div>
+            </div>
+        </div>
+
+        <!-- 主要內容顯示區 -->
+        <div id="main-content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 no-scrollbar overscroll-contain relative z-10 pb-24"></div>
+
+        <!-- 底部導航列 (Bottom Navigation) -->
+        <div class="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-stone-200/50 pb-safe z-50 overflow-x-auto no-scrollbar">
+            <div class="flex justify-between items-center h-16 min-w-max px-2" id="bottom-nav"></div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // --- 1. 資料來源設定 (Data Configuration) ---
+        // ==========================================
+        
+        const TITLES_WITHOUT_NAVIGATION = ["搭乘 CX564 飛往大阪", "搭乘 CX565 返台", "前往草津", "前往大阪", "移動至京都 (寄放行李) -> 神戶", "前往出町柳轉乘叡山電鐵", "移動至都飯店 (換宿)"];
+
+        const TRIP_DATA = {
+            // --- 航班資訊 ---
+            flights: [
+                { 
+                    type: "Departure", 
+                    date: "2025/12/27 (六)", 
+                    code: "CX564", 
+                    airline: "國泰航空", 
+                    route: "TPE 台北 (11:15) ➔ KIX 大阪 (14:55)", 
+                    terminal: "TPE T1 / KIX T1", 
+                    duration: "2h 40m", 
+                    aircraft: "Airbus A330-300", 
+                    class: "經濟 Q", 
+                    flightUrl: "http://www.flightaware.com/live/flight/CPA564",
+                    seatNotes: [
+                        "座位 43A、K 及 59A、K 為無景觀座位，座位旁並無窗口",
+                        "座位 59A、K 為無景觀座位，座位旁並無窗口",
+                        "座位 31A 為無景觀座位，座位旁並無窗口",
+                        "座位 46A、K、 49A、K 及 54A、K 為無景觀座位，座位旁並無窗口"
+                    ],
+                    seatUrl: "https://www.cathaypacific.com/cx/zh_TW/flying-with-us/aircraft-and-fleet/boeing-777/300.html#77k"
+                },
+                { 
+                    type: "Return", 
+                    date: "2026/01/11 (日)", 
+                    code: "CX565", 
+                    airline: "國泰航空", 
+                    route: "KIX 大阪 (16:15) ➔ TPE 台北 (18:30)", 
+                    terminal: "KIX T1 / TPE T1", 
+                    duration: "3h 25m", 
+                    aircraft: "Airbus A330-300", 
+                    class: "經濟 S", 
+                    flightUrl: "http://www.flightaware.com/live/flight/CPA565",
+                    seatNotes: [
+                        "座位 43A、K 及 59A、K 為無景觀座位，座位旁並無窗口",
+                        "座位 59A、K 為無景觀座位，座位旁並無窗口",
+                        "座位 31A 為無景觀座位，座位旁並無窗口",
+                        "座位 46A、K、 49A、K 及 54A、K 為無景觀座位，座位旁並無窗口"
+                    ],
+                    seatUrl: "https://www.cathaypacific.com/cx/zh_TW/flying-with-us/aircraft-and-fleet/boeing-777/300.html#77k"
+                }
+            ],
+            // --- 飯店住宿資訊 ---
+            hotels: [
+                { name: "草津波士頓廣場飯店", engName: "Hotel Boston Plaza Kusatsu", dates: "12/27 - 1/1 (5晚)", location: "滋賀縣草津市 (JR草津站旁)", features: ["交通便利", "美式風格", "適合自駕"], note: "作為滋賀縣人孔蓋卡收集的基地非常合適，飯店旁即有停車場與租車點。", image: "Boston.jpg" },
+                { name: "REF 京都八條口 by VESSEL HOTELS", engName: "REF Kyoto Hachijoguchi", dates: "1/1 - 1/4 (3晚)", location: "京都市南區 (京都站八條口)", features: ["大浴場", "現代日式", "免費迎賓飲料"], note: "靠近京都車站八條口，方便前往神戶(搭新快速)、奈良(搭近鐵)與搭乘 Haruka 回機場。", image: "Kyoto.jpg" },
+                { name: "都ホテル 京都八条", engName: "Miyako Hotel Kyoto Hachijo", dates: "1/4 - 1/8 (4晚)", location: "京都市南區 (京都站八條口)", features: ["交通便利", "機場巴士直達", "老牌經典"], note: "位於京都車站八條口正對面，位置絕佳。往返關西機場方便 (利木津巴士)。", image: "Miyako.jpg", mapUrl: "https://maps.app.goo.gl/QTZgLVhm8Kupw9UM7?g_st=ipc" },
+                { name: "大阪北濱大和Roynet飯店", engName: "Daiwa Roynet Hotel Osaka Kitahama", dates: "1/8 - 1/11 (3晚)", location: "大阪市中央區 (北濱站直結)", features: ["地鐵直結", "舒適寬敞", "交通便利"], note: "與地鐵堺筋線北濱站直結，交通便利。鄰近中之島公園與淀屋橋，環境優雅。", image: "Roynet.jpg" }
+            ],
+            // --- 每日詳細行程 ---
+            itinerary: [
+                { id: "day1", date: "12/27", dayOfWeek: "六", location: "大阪 ➔ 滋賀", weather: "sunny", temp: "9°C", items: [
+                    { type: "ticket", title: "南海二日券", note: "交通票券" },
+                    { type: "transport", time: "11:15", title: "搭乘 CX564 飛往大阪", note: "預計 14:55 抵達關西機場 T1。下機後請加速通關，目標 15:40 領到行李。" },
+                    { type: "visit", time: "16:00", title: "臨空城觀光案內所", tag: "收集", note: "營業時間: 09:00–20:00 (通常無休)。【優先】位於「臨空城車站」改札口外。務必先領取人孔蓋卡，建議趁天亮處理。", mapUrl: "https://maps.app.goo.gl/AFLxB4tBLNV1DPb79", bookingUrl: "https://www.kankou-izumisano.jp/50on/ka/1565835676276.html", starUrl: "https://www.city.izumisano.lg.jp/kakuka/jogesuidokyoku/jogesui/menu/1511934914176.html" },
+                    { type: "visit", time: "16:30", title: "岸和田站前觀光案內所", tag: "收集", note: "營業時間: 09:00–17:00 (年末年始可能縮短)。移動至南海本線岸和田站。領取以「山車祭」為設計的卡片。", mapUrl: "https://maps.app.goo.gl/hbFc4FkHzPWHKGkDA", bookingUrl: "https://www.city.kishiwada.lg.jp/page/36-touristinformationcenter.html", starUrl: "https://www.city.kishiwada.lg.jp/page/56-manholecard.html" },
+                    { type: "visit", time: "16:40", title: "まちの駅 かいづか (貝塚)", tag: "收集", note: "營業時間: 10:00–19:00。貝塚站附近 (3F)。領取貝塚市人孔蓋卡。", mapUrl: "https://www.google.com/maps/search/?api=1&query=まちの駅かいづか", bookingUrl: "https://www.machinoeki-kaizuka.com/", starUrl: "https://www.city.kaizuka.lg.jp/kakuka/jogesuido/gesuisuisin/topics/manholucard.html" },
+                    { type: "visit", time: "17:00", title: "泉佐野市 觀光資訊服務中心", tag: "收集", note: "營業時間: 10:00–20:00。位於南海「泉佐野站」。若時間充裕可前往 (距離臨空城一站)。", mapUrl: "https://maps.app.goo.gl/Fykh1UMmYw9CDw5x9", bookingUrl: "https://www.city.izumisano.lg.jp/kakuka/seikatsu/shoko/menu/izumisanomachidokoro.html", starUrl: "https://www.city.izumisano.lg.jp/kakuka/jogesuidokyoku/jogesui/menu/1511934914176.html" },
+                    { type: "shop", time: "17:30", title: "臨空城 Outlet", highlight: "必買: 運動品牌", note: "營業時間: 10:00–20:00。晚餐建議在此解決 (Seaside Area 美食街或餐廳)。" },
+                    { type: "transport", time: "21:00", title: "京都車站", note: "營業時間: 05:00–00:00。中途轉乘點，人潮眾多請注意隨身物品。", mapUrl: "https://maps.app.goo.gl/2cCysX1DTn8CFsCZA?g_st=ipc" },
+                    { type: "transport", time: "22:00", title: "前往草津", mode: "train", note: "臨空城 -> (關空快速/Haruka) -> 京都 -> (琵琶湖線) -> 草津。車程約 1.5~2 小時。", mapUrl: "https://maps.app.goo.gl/uKTS73uGsMJDYfVP9?g_st=ipc", videoUrl: "https://guideme24.com/products/e72-2-2" }, 
+                    { type: "hotel", time: "22:00", title: "草津波士頓廣場飯店", note: "24小時櫃台。位於草津站西口，出站即達。Check-in 後可至附近超商補給。" }
+                ]},
+                { id: "day2", date: "12/28", dayOfWeek: "日", location: "滋賀自駕", weather: "sunny", temp: "10°C", items: [
+                    { type: "transport", time: "08:00", title: "租車：Nissan Rent-a-car 草津駅前店", note: "營業時間: 08:00–20:00。備妥：台灣駕照、日文譯本、護照。檢查車況與 ETC 卡。設定導航至第一站。", mapUrl: "https://maps.app.goo.gl/BLq2AVS4vSBxa9Bs7" },
+                    { type: "visit", time: "09:30", title: "Kusatsu Yume-Honjin (くさつ夢本陣)", tag: "收集", note: "營業時間: 09:30–18:00。※年末年始 (12/29-1/3) 休館，本日(12/28)正常營業。準時開門領取。", parkingUrl: "https://maps.app.goo.gl/u6ZijyhJJtStz16C8", mapUrl: "https://maps.app.goo.gl/gQ4efFwChjmxP4Gq5?g_st=ipc", bookingUrl: "https://kanko-kusatsu.com/spot/kusatsuyumehonin", starUrl: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html" },
+                    { type: "visit", time: "10:00", title: "栗東観光案内所 (手原車站 2F)", tag: "收集", note: "營業時間: 08:30–12:00 (假日縮短)。位於 JR 手原站二樓。車程約 15 分鐘。※12/29-1/3 休館。", videoUrl: "https://guideme24.com/products/e72-2-1", starUrl: "https://www.city.ritto.lg.jp/soshiki/jogeuido/jogesuido/oshirase/7224.html" },
+                    { type: "visit", time: "10:30", title: "守山市駅前総合案内所", tag: "收集", note: "營業時間: 07:30–19:30。位於 JR 守山站西口。車程約 20 分鐘。領完卡可稍微休息。※年末年始正常營業。", bookingUrl: "https://pc-moriyama.jp/information", starUrl: "https://www.city.moriyama.lg.jp/kurashitetsuzuki/jougesuidou/1001701/1008797.html" },
+                     { type: "visit", time: "11:00", title: "道の駅 草津", tag: "收集", note: "營業時間: 09:00–18:00。位於烏丸半島。請把握時間前往領卡。※年末年始正常營業。", mapUrl: "https://maps.app.goo.gl/ToBkBynpWX7XvhsF6", bookingUrl: "https://www.karasuma.co.jp/2025/12/02/12%e6%9c%88%e3%81%ae%e5%96%b6%e6%a5%ad%e6%97%a5%e3%81%ab%e3%81%a4%e3%81%8d%e3%81%be%e3%81%97%e3%81%a6/", starUrl: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html" },
+                    { type: "visit", time: "12:30", title: "八日市駅前観光交流施設", tag: "收集", note: "營業時間: 10:00–17:00。近江鐵道八日市站內。這裡有著名的「大風箏」展示。※12/29-1/3 休館。", mapUrl: "https://maps.app.goo.gl/EHT2GLso3N3wFWXK9?g_st=ipc", starUrl: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1009690.html" },
+                    { type: "visit", time: "13:30", title: "東近江市役所 (假日：守衛室)", tag: "收集", note: "營業時間: 08:30–17:15。假日 (12/28) 需至市役所「宿直室 (守衛室)」領取 (10:00-16:00)。※12/29-1/3 暫停發放。", mapUrl: "https://maps.app.goo.gl/xNc1D2gmC5zpnUBS7?g_st=ipc", starUrl: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1008976.html" },
+                    { type: "visit", time: "14:30", title: "彥根市上下水道中心 (假日窗口)", tag: "收集", note: "營業時間: 08:30–17:15。假日 (12/28) 及 12/29-31 於正門警衛室領取 (9:00-17:00)。1/1-1/3 暫停。", mapUrl: "https://maps.app.goo.gl/mVScUD8s72aGcQTF9", starUrl: "https://www.city.hikone.lg.jp/kakuka/jogesuido/2/2219.html" },
+                    { type: "visit", time: "15:00", title: "Hikonyan Museum (彥根貓博物館)", highlight: "彥根貓表演", note: "營業時間: 09:00–17:00。位於彥根城表門附近。查好彥根貓登場時間 (通常下午有一場)。", mapUrl: "https://maps.app.goo.gl/kkbKSaDFaAikUWC89", bookingUrl: "https://www.hikonyan-museum.com/new_year_2026/", starUrl: "https://www.city.hikone.lg.jp/kakuka/jogesuido/2/2219.html" },
+                    { type: "shop", time: "17:00", title: "MITSUI OUTLET PARK 滋賀龍王", highlight: "關西最大級", note: "營業時間: 10:00–20:00。從彥根開車約 40 分鐘。店鋪極多，晚餐推薦「近江牛岡喜」。", mapUrl: "https://maps.app.goo.gl/bT1QG6s2nd2LCcDf8?g_st=ipc" }
+                ]},
+                { id: "day3", date: "12/29", dayOfWeek: "一", location: "海之京都", weather: "sunny", temp: "12°C", items: [
+                    { type: "transport", time: "06:30", title: "前往伊根灣", note: "早起出發！車程約 2.5 小時 (150km)，目標 09:00 前抵達伊根。", mapUrl: null },
+                    { type: "visit", time: "09:30", title: "伊根灣賞景觀光船", highlight: "舟屋 & 餵海鷗", note: "營業時間: 09:00–16:00 (每半小時一班)。航程約 25 分鐘。船上有販售蝦味先，海鷗與老鷹會飛得很近。", bookingUrl: "https://www.inewan.com/inewan_cruise/", videoUrl: "https://www.youtube.com/live/UG9WdWSDo4I?si=KYvhllx_Wjo4krCz" },
+                    { type: "visit", time: "11:00", title: "天橋立 傘松公園 (昇龍觀)", highlight: "日本三景", note: "營業時間: 09:00–17:00。搭纜車上山，從胯下窺看「飛龍在天」。", mapUrl: "https://maps.app.goo.gl/2UTtV1BR6svz4rQa6?g_st=ipc", bookingUrl: "https://www.amano-hashidate.com/cablecar/", videoUrl: "https://www.youtube.com/live/hVdb6BbxEdc?si=emhP_hcW_PWt7ost" },
+                    { type: "food", time: "12:30", title: "午餐：天橋立 / 宮津周邊", highlight: "海鮮丼 / 蛤蠣丼", note: "推薦：Suginoya (天橋立站前) 或 富田屋 (宮津站前)，營業時間通常為 11:30–14:30。" },
+                    { type: "shrine", time: "13:45", title: "丹後一宮 元伊勢 籠神社", note: "營業時間: 07:30–16:30 (冬季社務所)。位於傘松公園纜車站旁。丹後國一宮，氣場莊嚴。", mapUrl: "https://maps.app.goo.gl/5T2RZm25ysedgCKs8?g_st=ipc", goshuinUrl: "https://www.motoise.jp/omamori/gosyuin/" },
+                    { type: "visit", time: "14:45", title: "道の駅 海の京都 宮津", tag: "收集", note: "營業時間: 09:00–18:00。位於宮津市區。內有觀光案內所可領取人孔蓋卡。※年末年始正常營業。", mapUrl: "https://maps.app.goo.gl/8o12WE4J7ZNhWoeWA", starUrl: "https://www.pref.kyoto.jp/gesuido/manholemiyazu.html" },
+                    { type: "visit", time: "15:45", title: "天橋立 View Land (飛龍觀)", note: "營業時間: 09:00–17:00。位於車站後方。從另一側看沙洲。留意冬季纜車末班時間 (約 16:30-17:00)。", mapUrl: "https://maps.app.goo.gl/jbcSfyaEcciWeSuGA?g_st=ipc", bookingUrl: "https://www.viewland.jp/" },
+                    { type: "transport", time: "17:30", title: "返回草津", note: "車程約 2 小時。若太累可於途中休息站 (PA/SA) 晚餐。", mapUrl: null }
+                ]},
+                { id: "day4", date: "12/30", dayOfWeek: "二", location: "長濱/琵琶湖", weather: "sunny", temp: "12°C", items: [
+                    { type: "transport", time: "08:30", title: "抵達長濱港", highlight: "!", mode: "car", note: "營業時間: 09:00 (首班船)。前往琵琶湖中的能量景點「竹生島」。請預先確認冬季船班。", mapUrl: "https://maps.app.goo.gl/uMrWCQdtjCGpAsvT8", bookingUrl: "https://book.biwakokisen.co.jp/top/products/87fd7388-72d2-5b0b-af09-340f7e9aa8ef?lng=ja-JP" },
+                    { type: "shrine", time: "09:30", title: "竹生島 寶嚴寺", highlight: "投擲瓦片", note: "營業時間: 09:30–16:30 (配合船班)。島上參拜時間約 80 分鐘。必試「瓦片投擲」，投過鳥居可心想事成。", mapUrl: "https://maps.app.goo.gl/q2TAryroG2QNfisY8", goshuinUrl: "https://www.chikubushima.jp/prayer/" },
+                    { type: "visit", time: "11:30", title: "黑壁廣場 (長濱老街)", highlight: "大正浪漫", note: "營業時間: 10:00–17:00 (依店家不同)。玻璃工藝與老街。午餐推薦：翼果樓 (燒鯖魚素麵) 或 96Cafe (黑咖哩)。", mapUrl: "https://maps.app.goo.gl/y5RqTFwxJJLJ65w5A?g_st=ipc" },
+                    { type: "visit", time: "15:00", title: "大津駅観光案内所", tag: "收集", note: "營業時間: 09:00–18:00。開車南下至大津 (約 1 小時)。領取大津市人孔蓋卡。停車可利用車站旁暫停。※年末年始正常營業。", mapUrl: "https://maps.app.goo.gl/3RaAV6qsSCDTrXgS9", parkingUrl: "https://maps.app.goo.gl/M5SQU6NfjnbUdTPB7", starUrl: "https://www.city.otsu.lg.jp/kigyo/about/koho/68041.html" },
+                    { type: "shrine", time: "16:00", title: "近江神宮", highlight: "花牌情緣", note: "營業時間: 06:00–18:00 (社務所 09:30-16:30)。競技歌牌聖地。朱紅色的樓門非常美麗，時間允許亦可參觀鐘錶博物館。", mapUrl: "https://maps.app.goo.gl/p6m4t1iadDgsUKA97?g_st=ipc" }
+                    
+                ]},
+                { id: "day5", date: "12/31", dayOfWeek: "三", location: "近江八幡", weather: "cloudy", temp: "10°C", items: [
+                    { type: "visit", time: "09:00", title: "彥根城 (國寶五城)", highlight: "現存天守", note: "營業時間: 08:30–17:00。若 D2 時間不足，可利用今早登城。天守閣階梯陡峭請小心。", mapUrl: "https://maps.app.goo.gl/oQ6LteKGpyHSDj7s5" },
+                    { type: "shrine", time: "11:00", title: "多賀大社", highlight: "長壽祈願", note: "營業時間: 08:00–17:00 (社務所)。滋賀第一大社「多賀公」。門口必買名產「糸切餅」。年末可能已有初詣準備人潮。", mapUrl: "https://maps.app.goo.gl/FyG9SYzgecBRXQ74A" },
+                    { type: "shrine", time: "13:00", title: "日牟禮八幡宮", note: "營業時間: 09:00–17:00 (社務所)。移動至近江八幡 (約 40 分)。守護近江商人的神社，周邊有纜車可上八幡山。", parkingUrl: "https://maps.app.goo.gl/C75cjnqyUbhV4VFC8?g_st=ipc", mapUrl: "https://maps.app.goo.gl/mERTnaZjcGktySb98?g_st=ipc" },
+                    { type: "visit", time: "14:00", title: "八幡堀水鄉漫遊", highlight: "時代劇取景", note: "營業時間: 10:00–15:30 (冬季較早結束)。沿著護城河散步，感受江戶風情。若有船班可搭乘手搖船。", mapUrl: "https://maps.app.goo.gl/sFTezJr9KiYCmvfJ7?g_st=ipc" },
+                    { type: "visit", time: "15:30", title: "La Collina 近江八幡", highlight: "童話草屋", note: "營業時間: 09:00–18:00。必去！藤森照信建築。現烤年輪蛋糕是絕品。注意除夕營業時間可能提早結束 (1/1 休館)。", mapUrl: "https://maps.app.goo.gl/3T9ntRLyvAFsjgHi8" },
+                    { type: "food", time: "18:00", title: "跨年晚餐 (除夕)", note: "日本除夕餐廳多早關。建議提前預訂，或在平和堂超市買豪華壽司/熟食回飯店慶祝。", mapUrl: null },
+                    { type: "visit", time: "23:30", title: "除夜之鐘", note: "時間: 23:00–01:00。可步行至草津附近的立木神社或當地寺廟聆聽 108 響鐘聲。", mapUrl: null }
+                ]},
+                { id: "day6", date: "1/1", dayOfWeek: "四", location: "京都/初詣", weather: "sunny", temp: "9°C", items: [
+                    { type: "ticket", title: "JR關西地區鐵路周遊券4日", note: "交通票券" },
+                    { type: "transport", time: "08:00", title: "還車：Nissan Rent-a-car", note: "營業時間: 08:00–20:00。⚠️ 務必於 08:00 前加滿油並完成還車。結束滋賀自駕。", mapUrl: "https://maps.app.goo.gl/BLq2AVS4vSBxa9Bs7" },
+                    { type: "transport", time: "09:00", title: "移動：草津 -> 京都 (寄放行李) -> 神戶", note: "JR 新快速至京都 Check-in REF 飯店。", mapUrl: "https://maps.app.goo.gl/wvQV78Z1MTSnDR3J6" },
+                     { type: "shrine", time: "13:00", title: "勝林寺", note: "營業時間: 10:00–16:00 (花手水與御朱印)。東福寺塔頭。以絕美的「花手水」聞名。適合拍照。", goshuinUrl: "https://shourin-ji.org/goshuin/", mapUrl: "https://maps.app.goo.gl/8LEcUCmzyXsr33iS7?g_st=ipc" },
+                    { type: "shrine", time: "14:30", title: "平安神宮", note: "營業時間: 06:00–17:00 (社務所 09:00-16:00)。擁有巨大的紅色鳥居。明治時代重現平安京大內裏的建築，腹地廣大。", videoUrl: "https://guideme24.com/products/e129-9" },
+                    { type: "shrine", time: "16:00", title: "八阪神社", note: "營業時間: 24小時開放 (社務所 09:00-17:00)。位於祇園，本殿與舞殿必看，祈求美貌與結緣。", mapUrl: "https://maps.app.goo.gl/P3b9Q2t5yT8r7r3k9" },
+                    { type: "shop", time: "17:30", title: "Pokemon Center Kyoto", highlight: "藝妓皮卡丘", note: "營業時間: 10:00–20:00。位於 SUINA 室町 2F。特色是穿著和服的皮卡丘。", mapUrl: "https://maps.app.goo.gl/P5P8F5F9wNx8kPVB8?g_st=ipc" },
+                    { type: "shop", time: "19:00", title: "吉伊卡哇 Land 京都", note: "營業時間: 11:00–21:00。位於四條河原町 Kiddyland 內。繼續補貨京都限定商品。", mapUrl: "https://www.google.com/maps/search/?api=1&query=Kiddyland+京都" }   
+                    ]},                
+                   
+                { id: "day7", date: "1/2", dayOfWeek: "五", location: "奈良/大阪", weather: "sunny", temp: "11°C", items: [
+                    { type: "ticket", title: "JR關西地區鐵路周遊券4日", note: "交通票券" },
+                    { type: "transport", time: "08:00", title: "前往奈良", mode: "train", note: "搭乘近鐵京都線特急或急行前往近鐵奈良站。", mapUrl: null },
+                    { type: "shrine", time: "09:00", title: "春日大社", highlight: "鹿與燈籠", note: "營業時間: 06:30–17:00 (社務所 09:00-16:30)。參道上有許多鹿群。春日大社的燈籠與朱紅迴廊非常美麗。", mapUrl: "https://maps.app.goo.gl/9bcNMpgNLQTnVzG69?g_st=ipc" },
+                    { type: "food", time: "10:30", title: "水谷茶屋", highlight: "茅草屋", note: "營業時間: 11:00–16:00 (週三休)。位於春日大社與若草山之間。必點蕨餅、烏龍麵。拍照超美。", mapUrl: "https://maps.app.goo.gl/Moc84kkXC4qN5Piq7?g_st=ipc" },
+                    { type: "shrine", time: "11:30", title: "東大寺二月堂", highlight: "世界遺產", note: "營業時間: 24小時開放。大佛殿看世界最大青銅佛像。推薦走上二月堂，免費且可俯瞰奈良盆地。", mapUrl: "https://maps.app.goo.gl/NDEGsqMRrCt41PoT7", goshuinUrl: "https://www.todaiji.or.jp/information/nigatsudo/" },
+                    { type: "shrine", time: "12:00", title: "東大寺", note: "營業時間: 08:00–17:00 (大佛殿冬季)。大佛殿參拜。", mapUrl: "https://maps.app.goo.gl/BzL6nTUyZgyjinjx5", goshuinUrl: "https://www.todaiji.or.jp/sutra-and-goshuin/goshuin/" },
+                    { type: "shrine", time: "12:30", title: "御霊神社 (奈良町)", note: "營業時間: 09:00–17:00。位於奈良町內的老街區，可順道散步。", mapUrl: "https://maps.app.goo.gl/H4zGYhXNHFs1SHbG7", goshuinUrl: "https://naramachigoryojinja.amebaownd.com/" },
+                    { type: "visit", time: "13:30", title: "奈良町南観光案内所", tag: "收集", note: "營業時間: 09:00–17:00。位於奈良町老街區。領取奈良市人孔蓋卡，建築本身也是景點。", mapUrl: "https://maps.app.goo.gl/uYGs9e48zbmCL9m18", starUrl: "https://h2o.nara.nara.jp/info_924.html" },
+                    { type: "shrine", time: "15:00", title: "大鳥大社 (大阪堺市)", note: "營業時間: 06:00–18:00 (社務所 09:00-16:00)。特殊御守。", mapUrl: "https://maps.app.goo.gl/kyxyYjHMVcdGzBZg6?g_st=ipc", goshuinUrl: "https://www.ootoritaisha.jp/" },
+                    { type: "shrine", time: "16:00", title: "四天王寺", highlight: "佛教聖地", note: "營業時間: 08:30–16:00 (冬季)。日本佛教最早的寺院之一，境內清幽，中心伽藍值得參觀。", mapUrl: "https://maps.app.goo.gl/2in39kcxDNJneVmSA" },
+                    { type: "shop", time: "17:30", title: "寶可夢中心 大阪店 DX (大丸心齋橋9F)", highlight: "必買: 限定商品", note: "營業時間: 10:00–20:00 (新年請確認)。晚餐可於心齋橋/道頓堀解決。", mapUrl: "https://maps.app.goo.gl/6XNEnaevDXWHBe1q9" },
+                    { type: "shop", time: "19:00", title: "寶可夢中心 大阪 (大丸梅田13F)", highlight: "注意營業時間", note: "營業時間: 10:00–20:00。⚠️ 兩家寶可夢中心皆約 20:00 打烊，時間較趕，建議依當下位置擇一前往。", mapUrl: "https://www.google.com/maps/search/?api=1&query=寶可夢中心+梅田" },
+                    { type: "visit", time: "", title: "宇治市観光センター", tag: "備案", note: "營業時間: 09:00–17:00。搭乘JR奈良線至宇治。領取宇治人孔蓋卡。中心內有免費茶水。", starUrl: "https://www.city.uji.kyoto.jp/soshiki/12/6038.html" },
+                    { type: "shop", time: "", title: "吉伊卡哇 (Chiikawa) 伏見店", tag: "備案", highlight: "京都限定周邊", note: "營業時間: 09:00–18:00。Mogumogu 本舖。位於伏見稻荷大社附近，必買伏見稻荷限定狐狸造型周邊。" }
+                ]},
+                { id: "day8", date: "1/3", dayOfWeek: "六", location: "姬路/神戶", weather: "sunny", temp: "10°C", items: [
+                    { type: "ticket", title: "JR關西地區鐵路周遊券4日", note: "交通票券" },
+                    { type: "transport", time: "08:30", title: "前往姬路", mode: "train", note: "搭乘新幹線或 JR 新快速前往姬路 (約 45-60 分)。", mapUrl: null },
+                    { type: "visit", time: "10:00", title: "姫路市観光案内所", tag: "收集", note: "營業時間: 08:30–18:30。JR 姬路站中央改札口附近。領取姬路市人孔蓋卡。", mapUrl: "https://maps.app.goo.gl/jxpokBXhFywKXwDS6?g_st=ipc", bookingUrl: "https://www.himeji-kanko.jp/oyakudachi/11/", starUrl: "https://www.city.himeji.lg.jp/kurashi/0000000319.html" },
+                    { type: "visit", time: "10:30", title: "姬路城", highlight: "白鷺城", note: "營業時間: 09:00–16:00 (最後入城)。日本首個世界遺產，國寶天守。保留完整的木造建築，規模宏大。預留 2-3 小時。", mapUrl: "https://maps.app.goo.gl/scj7Td4A3KADXT6f9?g_st=ipc" },
+                    { type: "food", time: "13:00", title: "姬路午餐", note: "營業時間: 11:00–20:00 (依店家)。推薦：姬路關東煮 (生薑醬油味) 或星鰻飯。", mapUrl: null },
+                    { type: "shrine", time: "14:30", title: "生田神社 (初詣)", highlight: "戀愛結緣", note: "營業時間: 07:00–17:00 (正月期間延長)。新年參拜人潮極多，請有排隊心理準備。神戶著名的戀愛神社。", mapUrl: "https://maps.app.goo.gl/Qp6xcnbq8jurtKjr7", goshuinUrl: "https://ikutajinja.or.jp/goshuin" },
+                    { type: "visit", time: "15:30", title: "北野異人館街 / 天滿神社", note: "營業時間: 09:30–17:00。散步至北野。天滿神社可俯瞰神戶市景與風見雞之館。", mapUrl: "https://maps.app.goo.gl/fhcHcHdgvcvERgqb9?g_st=ipc", goshuinUrl: "https://www.kobe-kitano.net/goshuin/" },
+                    { type: "visit", time: "17:00", title: "神戶機場 綜合案內所", tag: "收集", note: "營業時間: 07:00–23:00。搭乘 Port Liner 至神戶機場 (欣賞海景)。領取神戶人孔蓋卡。", mapUrl: "https://maps.app.goo.gl/NNi4QQFVeQrsUWkb9", bookingUrl: "https://www.kairport.co.jp/service/equipment/information", starUrl: "https://www.city.kobe.lg.jp/a78445/kurashi/sumai/sewage/pr/manhole_card.html" },
+                    { type: "visit", time: "18:30", title: "美利堅公園 / BE KOBE", note: "營業時間: 24小時開放。傍晚至港邊，BE KOBE 地標拍照，欣賞神戶港夜景。", mapUrl: "https://maps.app.goo.gl/UYp8chLFqd5stcB77", videoUrl: "https://guideme24.com/products/e120" },
+                    { type: "visit", time: "19:00", title: "神戶港(看夜景)", note: "營業時間: 24小時開放。欣賞神戶港夜景。", mapUrl: "https://maps.app.goo.gl/YB55ixwE5YJrXe2p9" }
+                ]},
+                    
+                 { id: "day9", date: "1/4", dayOfWeek: "日", location: "和歌山", weather: "sunny", temp: "12°C", items: [
+                    { type: "ticket", title: "JR關西地區鐵路周遊券4日", note: "交通票券" },
+                    { type: "transport", time: "08:30", title: "移動至都飯店 (換宿)", note: "Check-out REF，移動至對面的 Miyako Hotel (寄放行李)。", mapUrl: "https://maps.app.goo.gl/buR8wciFZystpCy96?g_st=ipc" },
+                    { type: "visit", time: "10:30", title: "和歌山歷史館", tag: "收集", note: "營業時間: 09:00–17:30 (最後入場 17:00)。", mapUrl: "https://maps.app.goo.gl/rwhZCw7PzBXPR7q28?g_st=ipc", bookingUrl: "http://wakayamajo.jp/tenji/index.html", starUrl: "https://www.city.wakayama.wakayama.jp/suido/1033947/1034215/1034046.html" },
+                    { type: "visit", time: "11:30", title: "和歌山城", highlight: "日本百名城", note: "營業時間: 09:00–17:30 (最後入場 17:00)。紀州德川家名城。", mapUrl: "https://maps.app.goo.gl/ZqmMAHD6NhWDffE7A?g_st=ipc" },
+                    { type: "visit", time: "14:00", title: "和歌山電鐵 貴志線", highlight: "貓咪站長", note: "貴志站看小玉站長(二代/四代)。需注意電車班次與站長值班時間。", mapUrl: "https://maps.app.goo.gl/BmUwxpPbP7C7mPoT8", bookingUrl: "https://wakayama-dentetsu.co.jp/fare/one-day-pass/" },
+                    { type: "shrine", time: "15:30", title: "甘露寺", note: "營業時間: 08:30–17:00 (社務所)。鬼滅之刃聖地巡禮。", mapUrl: "https://maps.app.goo.gl/UYTL6Wkw2e3EKcZD7" },
+                    { type: "shrine", time: "16:30", title: "竈山神社", note: "營業時間: 09:00–17:00 (社務所)。西國三社參拜之一。", mapUrl: "https://maps.app.goo.gl/zwxAK88nVWx2Tmip7" }
+                   
+                ]},
+                { id: "day10", date: "1/5", dayOfWeek: "一", location: "京都 - 洛北", weather: "cloudy", temp: "7°C", items: [
+                    { type: "ticket", title: "關西鐵路卡三日券", note: "交通票券" },
+                    { type: "shrine", time: "07:30", title: "賀茂御祖神社 (下鴨神社)", highlight: "世界遺產", note: "營業時間: 06:30–17:00。位於鴨川上游。糾之森非常適合晨間散步。相生社祈求結緣。", mapUrl: "https://maps.app.goo.gl/744P88C558j5U2Vu7?g_st=ipc", goshuinUrl: "https://www.shimogamo-jinja.or.jp/omamori" },
+                    { type: "shrine", time: "08:30", title: "上賀茂神社", highlight: "世界遺產", note: "營業時間: 08:00–17:00。京都最古老的神社之一。需搭乘巴士前往。", mapUrl: "https://maps.app.goo.gl/5owZs7qck98j1Ba37" },
+                    { type: "transport", time: "09:30", title: "前往出町柳轉乘叡山電鐵", mode: "train", note: "營業時間: 始發 05:30 / 末班 23:30。搭乘著名的觀景列車「Kirara」前往貴船/鞍馬區域。欣賞沿途雪景。", mapUrl: "https://maps.app.goo.gl/FPmVS6W6woB9vjZZA" },
+                    { type: "shrine", time: "10:00", title: "鞍馬寺", highlight: "源義經", note: "營業時間: 09:00–16:00 (本殿/授與所)。能量景點。仁王門至本殿的參道在雪季非常壯觀。若積雪過深請小心行走。", mapUrl: "https://maps.app.goo.gl/RHCm3G9WwzATTBVc8?g_st=ipc" },
+                    { type: "visit", time: "11:30", title: "鞍馬山鋼索鐵道", note: "營業時間: 08:40–16:30。日本最短的鐵道，可省去爬坡體力。", mapUrl: null },
+                    { type: "shrine", time: "12:30", title: "貴船神社", highlight: "紅燈籠", note: "營業時間: 06:00–20:00 (授與所 09:00-17:00)。本宮參道的紅色獻燈與白雪形成的對比是京都冬日絕景。務必拍照。", mapUrl: "https://maps.app.goo.gl/8WzargmHKy8wGFKaA?g_st=ipc", videoUrl: "https://guideme24.com/products/e129-2", busUrl: "https://japantravel.navitime.com/zh-tw/area/jp/depArrTimeList/00056787/00056789/00016721?direction=down" },
+                    { type: "food", time: "14:00", title: "ひろ文 (Hirobun)", note: "營業時間: 11:00–21:00 (冬季)。冬季提供溫暖的川床料理或室內熱食。享受貴船的靜謐。", mapUrl: null },
+                    { type: "transport", time: "16:00", title: "貴船公車站", note: "搭乘公車下山至貴船口站。最後一班公車約 17:35 (請再次確認)。", mapUrl: "https://maps.app.goo.gl/e2qtxnRp5p8uq1nv5", busUrl: "https://japantravel.navitime.com/zh-tw/area/jp/depArrTimeList/00056789/00056787/00016721?direction=up" }
+                ]},
+                { id: "day11", date: "1/6", dayOfWeek: "二", location: "京都", weather: "sunny", temp: "8°C", items: [ 
+                    { type: "ticket", title: "京都市營地鐵 & 公車1日券", note: "交通票券" },
+                    { type: "shrine", time: "8:30", title: "北野天滿宮", highlight: "學問之神", note: "營業時間: 06:30–17:00 (社務所 09:00-17:00)。梅花與紅葉名所。摸摸牛頭祈求智慧。", mapUrl: "https://maps.app.goo.gl/E4WkNynSY7YmeyzT8?g_st=ipc", goshuinUrl: "https://kitanotenmangu.or.jp/amulet/" },
+                    { type: "shrine", time: "10:30", title: "金閣寺 (鹿苑寺)", highlight: "金碧輝煌", note: "營業時間: 09:00–17:00。午後陽光照射下的金閣寺最為閃耀。水中倒影絕美。", mapUrl: "https://maps.app.goo.gl/4m3dXJWAiBRjhdxN8?g_st=ipc" },
+                    { type: "shrine", time: "11:30", title: "仁和寺", note: "營業時間: 09:00–17:00 (最後入場 16:30)。皇室御願寺。雖非櫻花季，但御殿建築與庭園枯山水非常值得一看。", mapUrl: "https://maps.app.goo.gl/5YWzcadDHfKG9SeR7?g_st=ipc", goshuinUrl: "https://ninnaji.jp/lucky_charm/" },
+                    { type: "shrine", time: "13:30", title: "晴明神社", highlight: "陰陽師", note: "營業時間: 09:00–18:00 (社務所 09:00-16:30)。祭祀安倍晴明，除厄著名。尋找五芒星印記。", mapUrl: "https://maps.app.goo.gl/CdzkZyYHq4hqFrkf8?g_st=ipc", goshuinUrl: "https://www.seimeijinja.jp/" },
+                    { type: "shrine", time: "14:30", title: "天龍寺 (嵐山)", highlight: "曹源池庭園", note: "營業時間: 08:30–17:00。世界遺產。建議開門即入園，避開人潮，欣賞借景嵐山的庭園之美。", mapUrl: "https://maps.app.goo.gl/YzUGNs8DFJKB1W6JA?g_st=ipc" },
+                    { type: "visit", time: "15:30", title: "竹林小徑 & 野宮神社", highlight: "必拍", note: "營業時間: 24小時開放 (野宮神社 09:00–17:00)。從天龍寺北門出去即達。感受竹林幽靜。", mapUrl: "https://maps.app.goo.gl/tDdr4tS4kvyaiepM8", videoUrl: "https://guideme24.com/products/e124" },
+                    { type: "visit", time: "16:30", title: "渡月橋", highlight: "地標", note: "營業時間: 24小時開放。橫跨桂川的木造橋梁。可在河岸邊喝咖啡 (Arabica)。", videoUrl: "https://guideme24.com/products/e125" },
+                    { type: "visit", time: "17:30", title: "尋找鳳王人孔蓋", tag: "收集", note: "營業時間: 24小時開放。寶可夢人孔蓋『鳳王』。位於西京極/西大路御池附近的公園內。", mapUrl: "https://maps.app.goo.gl/rX5RkRCimURC2yaNA" }
+                    
+                ]},
+                { id: "day12", date: "1/7", dayOfWeek: "三", location: "京都/滋賀收集", weather: "cloudy", temp: "8°C", items: [
+                    { type: "ticket", title: "關西鐵路卡三日券", note: "交通票券" },
+                    { type: "visit", time: "09:00", title: "草津宿街道交流館", tag: "收集", note: "營業時間: 09:00–17:00。※年末年始 (12/29-1/3) 休館，本日正常營業。就在夢本陣附近，順道參觀。", mapUrl: "https://maps.app.goo.gl/TfcXcTNCF1PatLLd7", bookingUrl: "https://www.city.kusatsu.shiga.jp/kusatsujuku/index.html", starUrl: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html" },
+                    { type: "visit", time: "10:30", title: "大津市水再生中心", tag: "收集", note: "營業時間: 09:00–17:00 (平日)。平日限定！從京都站前往大津。請確認交通方式。", bookingUrl: "https://www.city.otsu.lg.jp/soshiki/080/1902/index.html", mapUrl: "https://maps.app.goo.gl/rPsp8JxNyEGP8ANi8?g_st=ipc", starUrl: "https://www.city.otsu.lg.jp/soshiki/080/1901/g/manhole/1499746928377.html" },
+                    { type: "visit", time: "12:00", title: "琵琶湖疏水記念館", tag: "收集", note: "營業時間: 09:00–17:00 (週一休)。位於南禪寺/蹴上鐵道附近。了解琵琶湖疏水歷史。", bookingUrl: "https://biwakososui-museum.city.kyoto.lg.jp/access/", mapUrl: "https://maps.app.goo.gl/gpJhtYyEQbV3bP5t6?g_st=ipc", starUrl: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html" },
+                   
+                    { type: "visit", time: "13:30", title: "京都市上下水道局 総合庁舎", tag: "收集", note: "營業時間: 08:30–17:15 (平日)。京都車站附近。平日限定。領取卡片。", bookingUrl: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html", mapUrl: "https://maps.app.goo.gl/TYy1uXLob5Rv5EuU8?g_st=ipc", starUrl: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html" },
+                    { type: "shrine", time: "14:00", title: "城南宮", note: "營業時間: 09:00–16:30 (社務所)。方除的大社，庭園非常有名。", mapUrl: "https://maps.app.goo.gl/8PfFptz2ZDvHQ2qM8", goshuinUrl: "https://www.jonangu.com/jyuyohinn.html" },
+                    { type: "visit", time: "15:00", title: "京都市上下水道局 太秦庁舎", tag: "收集", note: "營業時間: 08:30–17:15 (平日)。位於太秦天神川。平日限定。收集另一張京都人孔蓋卡。", bookingUrl: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html", mapUrl: "https://maps.app.goo.gl/gZgX1yEFrti6ptKv9?g_st=ipc", starUrl: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html" },
+                    { type: "shrine", time: "15:30", title: "松尾大社", highlight: "酒神", note: "營業時間: 09:00–16:00 (平日社務所)。釀酒之神，境內有靈泉「龜之井」。", mapUrl: "https://maps.app.goo.gl/F1L1tjAA83Lumwxr7" },
+                    { type: "shrine", time: "16:00", title: "梅宮大社", note: "營業時間: 09:00–17:00 (社務所)。貓與酒的神社。若時間允許，可順道參拜。庭園很有名。", mapUrl: "https://maps.app.goo.gl/nKQ3fBPVWNwNdPEL6?g_st=ipc" }
+                 ]},
+                { id: "day13", date: "1/8", dayOfWeek: "四", location: "大阪", weather: "sunny", temp: "9°C", items: [  
+                    { type: "ticket", title: "大阪地鐵＆大阪市營巴士2日乘車券", note: "交通票券" },
+                    { type: "transport", time: "08:30", title: "移動至都飯店 大阪北濱大和Roynet飯店(寄放行李)", note: "Check-in" },
+                    { type: "visit", time: "10:30", title: "クリアウォーターＯＳＡＫＡ", tag: "收集", note: "營業時間: 09:00–17:30 (平日)。領取水溝蓋卡。", mapUrl: "https://maps.app.goo.gl/pW4vX1DxcnLENsmMA?g_st=ipc", bookingUrl: "https://www.clearwater-osaka.jp", starUrl: "https://www.clearwater-osaka.jp/%e3%83%9e%e3%83%b3%e3%83%9b%e3%83%bc%e3%83%ab%e3%82%ab%e3%83%bc%e3%83%89%e3%81%ae%e9%85%8d%e5%b8%83%e3%81%ab%e3%81%a4%e3%81%84%e3%81%a6/" },
+                    { type: "visit", time: "11:00", title: "大阪市下水道科學館", tag: "收集", note: "營業時間: 09:30–17:00 (最後入館16:30)。入館免費。就在Clearwater附近，務必順道參觀並領取人孔蓋卡。", mapUrl: "https://maps.app.goo.gl/UVPmgKbZbKHRfCiFA", bookingUrl: "https://www.osaka-ssm.jp/information", starUrl: "https://www.city.osaka.lg.jp/kensetsu/page/0000431121.html" },
+                   
+                    { type: "shrine", time: "13:00", title: "難波八阪神社", highlight: "獅子殿", note: "營業時間: 06:00–17:00 (社務所 09:00-17:00)。巨大的獅子頭神殿，能吸走厄運、招來好運。拍照超震撼。", mapUrl: "https://maps.app.goo.gl/gqhtkipLbbtwRvdB8" },
+                    { type: "shrine", time: "14:30", title: "露天神社 (お初天神)", highlight: "戀人聖地", note: "營業時間: 06:00–23:00 (社務所 09:00-17:00)。梅田附近。祈求戀愛運，繪馬是美人祈願。", goshuinUrl: "https://tuyutenjin.com/ommamori02/#gosyuin", mapUrl: "https://maps.app.goo.gl/XGCMbrwcGczNx9xE8" },                    
+                    { type: "shop", time: "16:00", title: "梅田購物", note: "營業時間: 10:00–20:00。各大百貨 (阪急、LUCUA) 都在附近。晚餐可於 Grand Front 大阪享用。", mapUrl: null }
+                ]},
+                { id: "day14", date: "1/9", dayOfWeek: "五", location: "大阪市區", weather: "sunny", temp: "9°C", items: [
+                    { type: "ticket", title: "大阪地鐵＆大阪市營巴士2日乘車券", note: "交通票券" },
+                    { type: "visit", time: "07:00", title: "木津市場", note: "營業時間: 04:00–14:00 (週三休)。大阪人的廚房。建議早上去感受活力，品嚐新鮮生魚片早餐。", mapUrl: "https://maps.app.goo.gl/b7hKV4zaGPe4KKeF8" },
+                    { type: "shrine", time: "09:30", title: "大阪天滿宮", highlight: "學問之神", note: "營業時間: 09:00–17:00 (社務所)。天神橋筋商店街旁。大阪著名的天神信仰中心。", mapUrl: "https://maps.app.goo.gl/deHUmNYaKezFqGWz6" },
+                    { type: "visit", time: "11:00", title: "大阪城", highlight: "太閣之城", note: "營業時間: 09:00–17:00 (最後入館 16:30)。散步於大阪城公園。登上天守閣或在城下拍照。", mapUrl: "https://maps.app.goo.gl/zuSWYYHUrWYxWANV9" },
+                    
+                    { type: "shrine", time: "13:00", title: "綱敷天神社 御旅社", note: "營業時間: 09:00–17:00 (社務所)。位於梅田茶屋町。週六日才有特殊的哥吉拉御守。", mapUrl: "https://maps.app.goo.gl/qyM9eAhdFSgnJXtG6" }
+ 
+                ]},
+                { id: "day15", date: "1/10", dayOfWeek: "六", location: "大阪/兵庫收集", weather: "sunny", temp: "9°C", items: [
+                    { type: "ticket", title: "關西鐵路卡三日券", note: "交通票券" },
+                    { type: "visit", time: "09:00", title: "守口市役所 総合案内(1階)", tag: "收集", note: "營業時間週末9:00～17:30。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/bFhK6ETdsw1fMxfR7", bookingUrl: "https://www.city.moriguchi.osaka.jp/kakukanoannai/shiminseikatsubu/sogomadoguchika/19890.html", starUrl: "https://www.city.moriguchi.osaka.jp/kakukanoannai/kankyougesuidoubu/gesuidokanrika/designed_maintainance_hole/487.html" },
+                    { type: "visit", time: "10:00", title: "門真市役所宿直室(本館1階)", tag: "收集", note: "營業時間週末9:00～17:30。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/6qh6F5Pjjva2zPSX9", bookingUrl: "https://www.city.kadoma.osaka.jp/material/files/group/1/20240401_chosha_layout.pdf", starUrl: "https://www.city.kadoma.osaka.jp/kurashi/jogesuido/osirase/25709.html" },
+                    { type: "visit", time: "11:00", title: "門真市泉町浄水場 当直室", tag: "收集", note: "營業時間週末9:00～17:30。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/MpaFoBRGW22wQ5Vm6", bookingUrl: "https://cardhunter.jp/facility/enEnQWYZW5JHZK2pG7mkzIl39Gyy", starUrl: "https://www.city.kadoma.osaka.jp/kurashi/jogesuido/osirase/15607.html" },
+                    { type: "visit", time: "12:00", title: "摂津市上下水道部庁舎1階 お客さま窓口", tag: "收集", note: "營業時間週末8:45～17:00。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/eYDwWvN14erQ3QoQA", bookingUrl: "https://cardhunter.jp/facility/aQ4v4RZloyBu190O6EMk7TZOv689", starUrl: "https://www.city.settsu.osaka.jp/suidou/okyakusama/21655.html" },
+                    { type: "visit", time: "13:00", title: "千里ニュータウンプラザ2階", tag: "收集", note: "營業時間週末9:00～17:30。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/h7YEiSm43XCP58XZ7", bookingUrl: "https://www.city.suita.osaka.jp/shisei/shisetsu/1019110/1018385/index.html", starUrl: "https://www.city.suita.osaka.jp/kurashi/1018541/1018544/1003116.html" },
+                    { type: "visit", time: "14:00", title: "UR千里営業センター(19階)", tag: "收集", note: "營業時間週末9:30～18:00。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/sRRBaoSiu5ZjGmHq8", bookingUrl: "https://www.ur-net.go.jp/chintai/kansai/osaka/counter/senri/", starUrl: "https://uchi-machi-danchi.ur-net.go.jp/article/manhole-card/" },
+                    { type: "visit", time: "15:00", title: "阪急池田駅 改札口すぐ", tag: "收集", note: "營業時間週末9:30～17:00。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/XHP3E4A62U7815bS6", bookingUrl: "https://www.city.ikeda.osaka.jp/soshiki/siminseikatsu/citypro/shisetsu/1556073544319.html", starUrl: "https://www.city.ikeda.osaka.jp/jogesuido/soshiki/keiei/gyomu/koho/1603072958047.html" },
+                    { type: "visit", time: "15:30", title: "池田市観光案内所", tag: "收集", note: "營業時間週末10:00～18:00。※年末年始(12/29-1/3)暫停發放。", mapUrl: "https://maps.app.goo.gl/SzDVDjHCo5GfeYTg7", bookingUrl: "https://www.ikedashi-kanko.jp/shop/ikeda_city_tourist_information_center", starUrl: "https://www.city.ikeda.osaka.jp/jogesuido/soshiki/keiei/gyomu/koho/1603072958047.html" },
+                    { type: "visit", time: "16:00", title: "伊丹市立観光物産ギャラリー", tag: "收集", note: "營業時間週末10:00～17:00。※年末年始(12/29-1/3)休館。", mapUrl: "https://maps.app.goo.gl/NZuiNP6XjJsZ1XWq5", bookingUrl: "http://itami-kankou.com/gallery", starUrl: "https://www.water.itami.hyogo.jp/soshiki/keieikikakuka/4564564644465655/manholecard.html" },
+                    { type: "visit", time: "16:30", title: "旧岡田家住宅・酒蔵", tag: "收集", note: "營業時間週末10:00～18:00。※年末年始(12/29-1/3)休館。", mapUrl: "https://maps.app.goo.gl/duz3cR7KLChDibZY8", bookingUrl: "https://itami-im.jp/about/okada-ishibashi/", starUrl: "https://www.water.itami.hyogo.jp/soshiki/keieikikakuka/4564564644465655/manholecard.html" },
+                    { type: "visit", time: "17:00", title: "あまがさき観光案内所(阪神尼崎駅前)", tag: "收集", note: "營業時間週末9:00～17:00。※年末年始(12/29-1/2)暫停發放。", mapUrl: "https://maps.app.goo.gl/UnY58wvNw6KwhpTu9", bookingUrl: "https://kansai-tourism-amagasaki.jp/information-center/", starUrl: "https://amasui.org/customer/gesuido/2000911/2000456/2000759/2000758.html" },
+                    { type: "visit", time: "17:30", title: "尼崎市100周年記念", tag: "收集", note: "營業時間週末9:00～17:00。※年末年始(12/29-1/2)暫停發放。", starUrl: "https://amasui.org/customer/gesuido/2000911/2000456/2000457/2000458.html" }
+                   
+                ]},
+                { id: "day16", date: "1/11", dayOfWeek: "日", location: "大阪 ➔ 台北", weather: "cloudy", temp: "9°C", items: [
+                    { type: "transport", time: "14:00", title: "抵達關西機場", note: "前往 T1 辦理登機手續。最後整理行李。", mapUrl: null },
+                    { type: "transport", time: "16:15", title: "搭乘 CX565 返台", note: "預計 18:30 抵達台北。再見關西！" }
+                ]},
+                { id: "dayBackup", date: "備用", dayOfWeek: "★", location: "備用景點", weather: "cloudy", temp: "-", items: [
+                   { type: "visit", title: "堺東観光案内所", tag: "收集", note: "營業時間: 09:00–19:00。領取堺市人孔蓋卡。", mapUrl: "https://maps.app.goo.gl/UT1r5SbNLHRSwT217?g_st=ipc", bookingUrl: "https://www.sakai-tcb.or.jp/service/", starUrl: "https://water.city.sakai.lg.jp/about/kouhou/1522311572373.html" },
+                    
+                    { type: "visit", title: "大阪府立臨海體育中心", note: "營業時間: 09:00–21:00。", mapUrl: "https://maps.app.goo.gl/hT2KWdqTvWbqgmqG9?g_st=ipc", bookingUrl: "https://rin-spo.com" },
+                    { type: "visit", title: "田尻町公所", tag: "收集", note: "營業時間: 08:45–17:15 (平日)。", mapUrl: "https://maps.app.goo.gl/htgqC3bGNAUiePz18?g_st=ipc", bookingUrl: "https://www.town.tajiri.osaka.jp" },
+                    { type: "visit", title: "大阪広域水道企業団 阪南水道センター・阪南市 事業部 下水道課", tag: "收集", note: "營業時間: 08:45–17:15 (平日)。", mapUrl: "https://maps.app.goo.gl/ABQeu22E5o5jGKCT7", bookingUrl: "https://www.city.hannan.lg.jp", starUrl: "https://www.city.hannan.lg.jp/kakuka/toshi/gesuido/6682.html" },
+                ]}
+            ],
+            // --- 人孔蓋卡庫存資訊 ---
+            manholeStock: [
+                { name: "臨空城案內所", region: "大阪", hours: "09:00–20:00 (每日)", url: "https://www.city.izumisano.lg.jp/kakuka/jogesuidokyoku/jogesui/menu/1511934914176.html" },
+                { name: "道の駅 草津", region: "滋賀", hours: "09:00–18:00 (每日)", url: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html", highlight: true, textColor: "text-orange-600" },
+                { name: "大津車站觀光案内所", region: "滋賀", hours: "09:00–18:00 (每日)", url: "https://www.city.otsu.lg.jp/kigyo/about/koho/68041.html", highlight: true, textColor: "text-orange-600" },
+                { name: "くさつ夢本陣", region: "滋賀", hours: "09:00–17:00 (每日)", url: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html" },
+                { name: "草津宿街道交流館", region: "滋賀", hours: "09:00–17:00 (每日)", url: "https://www.city.kusatsu.shiga.jp/kurashi/suidogesuido/gesuido/manholecard.html", highlight: true, textColor: "text-red-600" },
+                { name: "栗東観光案内所 二樓", region: "滋賀", hours: "08:30–12:00(土日祝)", url: "https://www.city.ritto.lg.jp/soshiki/jogeuido/jogesuido/oshirase/7224.html" },
+                { name: "栗東市立図書館", region: "滋賀", hours: "10:00–17:00 (週二-週日)", url: "https://www.city.ritto.lg.jp/soshiki/jogeuido/jogesuido/oshirase/7224.html", highlight: true },
+                { name: "守山市駅前総合案内所", region: "滋賀", hours: "07:30–19:30 (每日)", url: "https://www.city.moriyama.lg.jp/kurashitetsuzuki/jougesuidou/1001701/1008797.html" },
+                { name: "八日市駅前観光交流施設", region: "滋賀", hours: "10:00–17:00 (每日)", url: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1009690.html" },
+                { name: "東近江市役所 守衛室", region: "滋賀", hours: "10:00–16:00 (土日祝)", url: "https://www.city.higashiomi.shiga.jp/kurashi_tetsuzuki/jougesuidou/1008975/1008976.html", highlight: false },
+                { name: "豊郷町観光案内所", region: "滋賀", hours: "09:00–17:00 (每日)", url: "https://www.town.toyosato.shiga.jp/0000001749.html", highlight: true },
+                { name: "彥根市上下水道料金お客様サービスセンター", region: "滋賀", hours: "09:00–17:00 (平日)", url: "https://www.city.hikone.lg.jp/kakuka/jogesuido/2/2219.html" },
+                { name: "ひこね食賓館四番町ダイニング", region: "滋賀", hours: "10:00–17:00 (每日)", url: "https://www.city.hikone.lg.jp/kakuka/jogesuido/2/2219.html" },
+                { name: "「道の駅 海の京都 宮津」観光案内所", region: "京都", hours: "09:00–17:30 (每日)", url: "https://www.pref.kyoto.jp/gesuido/manholemiyazu.html" },
+                { name: "神戸空港 1 階総合案内所", region: "兵庫", hours: "07:00–23:00 (每日)", url: "https://www.city.kobe.lg.jp/a78445/kurashi/sumai/sewage/pr/manhole_card.html" },
+                { name: "芦屋市役所守衛室", region: "兵庫", hours: "09:00–17:00 (土日祝)", url: "https://www.city.ashiya.lg.jp/gesuidou/mhc.html", highlight: true },
+                { name: "大阪観光案内所(JR 車站內)", region: "大阪", hours: "07:00–21:00 (每日)", url: "https://www.city.osaka.lg.jp/kensetsu/page/0000431121.html" },
+                { name: "奈良町南観光案内所", region: "奈良", hours: "09:00–17:00 (每日)", url: "https://h2o.nara.nara.jp/info_924.html" },
+                { name: "宇治市観光センター", region: "京都", hours: "09:00–17:00 (每日)", url: "https://www.city.uji.kyoto.jp/soshiki/12/6038.html" },
+                { name: "大阪市下水道科學館", region: "大阪", hours: "09:30–17:00 (週一休)", url: "https://www.city.osaka.lg.jp/kensetsu/page/0000431121.html", highlight: true },
+                { name: "おおさか ATC グリーンエコプラザ", region: "大阪", hours: "10:00–17:00 (週一休)", url: "https://www.city.osaka.lg.jp/kensetsu/page/0000431121.html" },
+                { name: "堺東観光案内所", region: "大阪", hours: "09:00–19:00 (每日)", url: "https://water.city.sakai.lg.jp/about/kouhou/1522311572373.html" },
+                { name: "岸和田駅前観光案内所", region: "大阪", hours: "09:00–17:00 (每日)", url: "https://www.city.kishiwada.lg.jp/page/56-manholecard.html" },
+                { name: "まちの駅かいづか", region: "大阪", hours: "10:00–19:00 (每日)", url: "https://www.city.kaizuka.lg.jp/kakuka/jogesuido/gesuisuisin/topics/manholucard.html" },
+                { name: "泉佐野市観光情報センター", region: "大阪", hours: "10:00–16:00 (每日)", url: "https://www.city.izumisano.lg.jp/kakuka/jogesuidokyoku/jogesui/menu/1511934914176.html" },
+            ],
+            // --- 追加人孔蓋卡地點 ---
+            manholeStockExtra: [
+                { name: "大津市水再生センター", region: "滋賀", hours: "09:00–17:00 (平日)", url: "https://www.city.otsu.lg.jp/soshiki/080/1901/g/manhole/1499746928377.html" },
+                { name: "琵琶湖疏水記念館", region: "京都", hours: "09:00–17:00 (週一休)", url: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html" },
+                { name: "京都市上下水道局 総合庁舎", region: "京都", hours: "08:30–17:15 (平日)", url: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html" },
+                { name: "京都市上下水道局 太秦庁舎", region: "京都", hours: "08:30–17:15 (平日)", url: "https://www.city.kyoto.lg.jp/suido/page/0000277176.html" },
+                { name: "姫路市観光案内所", region: "兵庫", hours: "08:30–18:30 (每日)", url: "https://www.city.himeji.lg.jp/kurashi/0000000319.html" },
+                { name: "クリアウォーターＯＳＡＫＡ", region: "大阪", hours: "09:00–17:30 (平日)", url: "https://www.clearwater-osaka.jp/%e3%83%9e%e3%83%b3%e3%83%9b%e3%83%bc%e3%83%ab%e3%82%ab%e3%83%bc%e3%83%89%e3%81%ae%e9%85%8d%e5%b8%83%e3%81%ab%e3%81%a4%e3%81%84%e3%81%a6/" },
+                { name: "堺利晶之杜", region: "大阪", hours: "09:00–18:00 (每日)", url: "https://water.city.sakai.lg.jp/about/kouhou/1522311572373.html" },
+                { name: "田尻町役場別館", region: "大阪", hours: "08:45–17:15 (平日)", url: "tel:0724665007", textColor: "text-stone-700" },
+                { name: "大阪広域水道企業団 阪南水道センター・阪南市 事業部 下水道課", region: "大阪", hours: "08:45–17:15 (平日)", url: "https://www.city.hannan.lg.jp/kakuka/toshi/gesuido/6682.html" },
+                { name: "わかやま歴史館", region: "和歌山", hours: "09:00–17:30 (每日)", url: "https://www.city.wakayama.wakayama.jp/suido/1033947/1034215/1034046.html" }
+            ],
+            // --- 備用人孔蓋卡地點 (多為行政機關，需注意假期) ---
+            manholeStockBackup: [
+                { name: "守口市役所 総合案内(1階)", region: "大阪", hours: "09:00–17:30", url: "https://www.city.moriguchi.osaka.jp/kakukanoannai/kankyougesuidoubu/gesuidokanrika/designed_maintainance_hole/487.html" },
+                { name: "門真市役所宿直室(本館1階)", region: "大阪", hours: "09:00–17:30", url: "https://www.city.kadoma.osaka.jp/kurashi/jogesuido/osirase/25709.html" },
+                { name: "門真市泉町浄水場 当直室", region: "大阪", hours: "09:00–17:30", url: "https://www.city.kadoma.osaka.jp/kurashi/jogesuido/osirase/15607.html" },
+                { name: "摂津市上下水道部庁舎1階 お客さま窓口", region: "大阪", hours: "08:45–17:00", url: "https://www.city.settsu.osaka.jp/suidou/okyakusama/21655.html" },
+                { name: "千里ニュータウンプラザ2階", region: "大阪", hours: "09:00–17:30", url: "https://www.city.suita.osaka.jp/kurashi/1018541/1018544/1003116.html" },
+                { name: "UR千里営業センター(19階)", region: "大阪", hours: "09:30–18:00", url: "https://uchi-machi-danchi.ur-net.go.jp/article/manhole-card/" },
+                { name: "阪急池田駅 改札口すぐ", region: "大阪", hours: "09:30–17:00", url: "https://www.city.ikeda.osaka.jp/jogesuido/soshiki/keiei/gyomu/koho/1603072958047.html" },
+                { name: "池田市観光案内所", region: "大阪", hours: "10:00–18:00", url: "https://www.city.ikeda.osaka.jp/jogesuido/soshiki/keiei/gyomu/koho/1603072958047.html" },
+                { name: "伊丹市立観光物産ギャラリー", region: "兵庫", hours: "10:00–17:00", url: "https://www.water.itami.hyogo.jp/soshiki/keieikikakuka/4564564644465655/manholecard.html" },
+                { name: "旧岡田家住宅・酒蔵", region: "兵庫", hours: "10:00–18:00", url: "https://www.water.itami.hyogo.jp/soshiki/keieikikakuka/4564564644465655/manholecard.html" },
+                { name: "あまがさき観光案内所(阪神尼崎駅前)", region: "兵庫", hours: "09:00–17:00", url: "https://amasui.org/customer/gesuido/2000911/2000456/2000759/2000758.html" },
+                { name: "尼崎市 (100周年記念)", region: "兵庫", hours: "09:00–17:00", url: "https://amasui.org/customer/gesuido/2000911/2000456/2000457/2000458.html" }
+            ],
+            // --- 地圖與相關連結 ---
+            mapLinks: [
+                { title: "關西周遊路線圖", url: "https://www.surutto.com/kansai_rw/assets/pdf/areamap2024_tw.pdf" },
+                { title: "Osaka Metro路線圖", url: "https://subway.osakametro.co.jp/img/osakametro_rosenzu_20250404.pdf" },
+                { title: "阪急電鐵", url: "https://www.hankyu.co.jp/station/pdf/zh-tw/map_station_zh-tw.pdf" },
+                { title: "阪神電鐵", url: "https://www.hanshin.co.jp/global/tw/pdf/map.pdf" },
+                { title: "紀念幣地圖", url: "https://www.stampmedal.com/map.htm" },
+                { title: "京都五社巡禮", url: "https://www.matsunoo.or.jp/wp/wp-content/themes/matsuotheme/pdf/gosyameguri.pdf" },
+                { title: "滋賀縣即時影像", url: "https://guideme24.com/categorys?query=%E6%BB%8B%E8%B3%80" },
+                { title: "京都府即時影像", url: "https://doitwell.app/CCTVs/world/%E6%97%A5%E6%9C%AC%E3%83%BB%E4%BA%AC%E9%83%BD" },
+                { title: "マンホールカード情報まとめサイト", url: "https://anythingsearch.info/" },
+                { title: "マンホールカード官網", url: "https://www.gk-p.jp/mhcard/" },
+                { title: "マンホールカード地圖", url: "https://ekikaramanhole.whitebeach.org/ext/manholecard/map/?t=map" },
+                { title: "永旺夢樂城Kyoto 4F (轉蛋屋)", url: "https://maps.app.goo.gl/8NoQd7g6H5cn7UiG7" },
+                { title: "一番賞 京都店", url: "https://maps.app.goo.gl/7jykpS5VA2N82SyN8" },
+                { title: "一番賞官網", url: "https://bandainamco-am.co.jp/chara_shop/ichibankuji-official-shop/?areaNo=6&prefNo=25" },
+                { title: "coinlocker地圖", url: "https://coinlocker.click/" }
+            ],
+            // --- 行程筆記與餐飲推薦 ---
+            notes: [
+                {
+                    date: "12/27（六）",
+                    links: [{ title: "臨空城 Outlet 電子地圖", url: "https://platinumaps.jp/d/premiumoutlets-rinku?floor=1F", note: "Nike沒有免稅" }],
+                    dining: [{ area: "滋賀 - 草津", spots: [{ name: "東京油組総本店 滋賀組", cuisine: "油蕎麥", hours: "11:00–02:00", note: "無湯拉麵，將特製醬汁與醋/辣油拌入熱麵中。", mapUrl: "https://maps.app.goo.gl/Zjj8pK1nmaVU6Ug19" }, { name: "麺屋EDITION草津店", cuisine: "近江牛醬油拉麵", hours: "17:00–02:45", note: "使用近江牛骨熬製的黑醬油湯頭。" }, { name: "カマドのタコ", cuisine: "章魚燒 /居酒屋", hours: "12:00–23:00", note: "適合宵夜小酌。", mapUrl: "https://maps.app.goo.gl/f8viAbvjP5p6tLtQ6" }, { name: "くさつ平和堂", cuisine: "大型超市", hours: "09:00–21:30", note: "草津站東口。適合購買水果、熟食。", mapUrl: "https://maps.app.goo.gl/g81dTrt1ruJAxkT37" }, { name: "近江牛焼肉 MAWARI 南草津店", cuisine: "近江牛燒肉", hours: "17:00–23:00", note: "CP值高的近江牛燒肉店，建議預約。", mapUrl: "https://maps.app.goo.gl/LZFTbWNz9Dpy9TWJ8" }] }]
+                },
+                {
+                    date: "12/28（日）",
+                    links: [{ title: "MITSUI OUTLET PARK 滋賀龍王地圖", url: "https://mitsui-shopping-park.com/mop/file/filer/shiga/floor/00008_fo.pdf", note: "PDF下載" }],
+                    dining: [{ area: "滋賀 - 彥根/龍王", spots: [{ name: "近江ちゃんぽん亭 本店", cuisine: "近江強棒麵", hours: "11:00–22:00", note: "滋賀縣民的靈魂美食。特色是大量蔬菜與清淡和風高湯。", mapUrl: "https://maps.app.goo.gl/4pevVmcwwPP1eT8u5" }, { name: "らーめん本気", cuisine: "強棒麵 / 拉麵", hours: "11:00–20:30", note: "彥根名店。" }, { name: "たねや 彦根美濠の舎", cuisine: "和菓子 / 年輪蛋糕", hours: "09:00–18:00", note: "Club Harie 彥根分店，建築優美。", mapUrl: "https://maps.app.goo.gl/hPLMGketJvLks6p87" }, { name: "近江肉 せんなり亭伽羅", cuisine: "近江牛懷石", hours: "11:30–15:00, 17:00–21:30", note: "高級近江牛料理專門店。", mapUrl: "https://maps.app.goo.gl/eFJ9CDUF5pUwmXrS8" }] }]
+                },
+                {
+                    date: "12/29（一）",
+                    links: [{ title: "伊根湾めぐり遊覧船", url: "https://www.inewan.com/inewan_cruise/", note: "1,200円" }, { title: "傘松観光券", url: "https://www.tankai.jp/tourist_tickets/#inekasamatsu", note: "2,000円券" }, { title: "天橋立ビューランド", url: "https://www.viewland.jp/tw/eigyou/", note: "1,000円" }],
+                    dining: [{ area: "京都 - 傘松/成相寺/天橋立", spots: [{ name: "Suginoya (すぎのや)", cuisine: "黑竹輪 / 烏龍麵", hours: "11:30–16:00", note: "位於天橋立站前。必點宮津名產「黑竹輪」。", mapUrl: "https://maps.app.goo.gl/tEp45aDV6KEpciG37" }, { name: "海鮮工房 橋立物產", cuisine: "海鮮丼 / 松葉蟹", hours: "11:00–17:00", note: "海鮮批發商直營，食材新鮮。", mapUrl: "https://maps.app.goo.gl/1n6htfvFC6ZJLCwS9" }, { name: "文珠莊 勘七茶屋", cuisine: "智慧之餅", hours: "09:00–17:00", note: "智恩寺門前的茶屋。", mapUrl: "https://maps.app.goo.gl/XqvKrtaCaJkCyqVd9" }, { name: "咖啡館 龍燈之松", cuisine: "拉麵 / 咖啡", hours: "11:30–19:00", note: "位於智恩寺旁，有特色的拉麵與甜點。", mapUrl: "https://maps.app.goo.gl/ppaASzBRfQDksssP6" }] }, { area: "京都 - 宮津午餐", spots: [{ name: "烏冬小吃大門", cuisine: "咖哩烏龍麵", hours: "11:30–14:30、17:30–20:30", note: "宮津名店，濃郁的「咖哩烏龍麵」。", mapUrl: "https://maps.app.goo.gl/XuUhLeaJ4kGXr5Ag9" }, { name: "こんぴらうどん", cuisine: "手打烏龍麵", hours: "11:00–15:00", note: "提供道地的讚岐風格手打烏龍麵。", mapUrl: "https://maps.app.goo.gl/aKJcxnB4i1aesAadA?g_st=ipc" }, { name: "富田屋", cuisine: "海鮮定食", hours: "11:00–21:30", note: "宮津站前傳奇老店。CP值極高。", mapUrl: "https://maps.app.goo.gl/B52SCgQa1vkrkkPs8" }, { name: "Seafood Kawasaki", cuisine: "海鮮丼", hours: "11:00–13:30", note: "提供新鮮且價格實惠的海鮮丼。", mapUrl: "https://maps.app.goo.gl/85PgVVpZyfBDBdtZ7" }, { name: "山海屋", cuisine: "海鮮料理", hours: "11:00–22:00", note: "宮津Shopping Center內。", mapUrl: "https://maps.app.goo.gl/3n5uxsmPifezUnbCA" }] }, { area: "京都 - 宮津晚餐", spots: [{ name: "お食事処 割烹たんご", cuisine: "海鮮懷石", hours: "17:30–22:30", note: "提供精緻的丹後海鮮料理。" }] }]
+                },
+                {
+                    date: "12/30 (二)",
+                    dining: [{ area: "滋賀 - 長濱", spots: [{ name: "翼果樓", cuisine: "燒鯖魚素麵", hours: "10:30–15:00", note: "長濱必吃名物！", mapUrl: "https://maps.app.goo.gl/M2b1zmTJekofTqZ8A" }, { name: "96CAFE", cuisine: "黑咖哩 / 黑霜淇淋", hours: "11:00–17:30", note: "黑壁廣場名物。", mapUrl: "https://maps.app.goo.gl/MiHw3RWh5FEupBd89" }, { name: "芋平長浜店", cuisine: "芋頭金鍔燒", hours: "10:00–17:00", note: "現烤的番薯/芋頭甜點。", mapUrl: "https://maps.app.goo.gl/p9WPAwh6gVX1eSdK7" }, { name: "炭火焼うなぎ料理 ざいもん", cuisine: "鰻魚飯", hours: "11:00–14:00, 17:00–21:00", note: "關西風鰻魚飯。", mapUrl: "https://maps.app.goo.gl/2b38CdtSP6qpMFhT8" }, { name: "らうめん屋台屋", cuisine: "拉麵", hours: "", note: "當地人氣拉麵店。", mapUrl: "https://maps.app.goo.gl/N33eYkm1SyxYhyoHA" }] }]
+                },
+                {
+                    date: "12/31 (三)",
+                    dining: [{ area: "滋賀 - 近江八幡", spots: [{ name: "近江牛料理 千成亭", cuisine: "近江牛壽喜燒", hours: "10:00–17:00", note: "八幡堀旁的名店。", mapUrl: "https://maps.app.goo.gl/ZXs7qm42FVCM3xGVA" }, { name: "久ぼ多屋", cuisine: "近江牛壽喜燒", hours: "11:00–17:00", note: "提供多樣化的近江牛料理。", mapUrl: "https://maps.app.goo.gl/dTZvwTyUpaUXWVJP8" }, { name: "丸竹近江牛 西川", cuisine: "近江牛牛排", hours: "11:00–15:00, 16:00–19:00", note: "老字號精肉店直營。", mapUrl: "https://maps.app.goo.gl/2Wwx1MrNJmwFwvfw6" }, { name: "お食事処和でん", cuisine: "近江牛定食", hours: "11:00–15:00", note: "提供平價實惠的近江牛午餐定食。", mapUrl: "https://maps.app.goo.gl/3TVVaLspqCMVWAjd8" }, { name: "日牟禮乃舍", cuisine: "年輪蛋糕", hours: "09:30–17:00", note: "Club Harie 日牟禮館。", mapUrl: "https://maps.app.goo.gl/BAbfwkGY47DuMW4t8" }] }]
+                },
+                {
+                    date: "1/1 (四)",
+                    dining: [{ area: "大阪 / 神戶", spots: [{ name: "らぁ麺 鴨と葱 梅田店", cuisine: "鴨肉拉麵", hours: "11:00–23:00", note: "來自東京御徒町的名店。" }, { name: "神戶三宮 / 元町", cuisine: "中華料理", hours: "", note: "新年期間建議在三宮或元町的中華街覓食。", mapUrl: "https://maps.app.goo.gl/m2XA2WzBxvyH8tjA6" }] }],
+                    routes: [{ area: "心齋橋", spots: [{ name: "寶可夢中心 大阪店 DX", hours: "10:00–20:00", mapUrl: "https://maps.app.goo.gl/6XNEnaevDXWHBe1q9" }, { name: "CHIIKAWA LAND PARCO", hours: "10:00–20:00" }] }, { area: "梅田", spots: [{ name: "寶可夢中心 大阪大丸梅田", hours: "10:00–20:00" }, { name: "ちいかわらんど 大阪梅田店", hours: "10:00–20:00", note: "阪急三番街南館B1" }, { name: "梅田藍天大樓", hours: "09:30–22:00" }, { name: "HEP FIVE 摩天輪", hours: "11:00–22:45" }] }]
+                },
+                {
+                    date: "1/2 (五)",
+                    dining: [{ area: "奈良", spots: [{ name: "中谷堂", cuisine: "麻糬", hours: "10:00–18:00", note: "必看高速搗麻糬表演。", mapUrl: "https://maps.app.goo.gl/ZobNUwiuMZgPRVQf7" }] }, { area: "京都 - 宇治", spots: [{ name: "中村藤吉 本店", cuisine: "抹茶甜點", hours: "10:00–17:30", note: "宇治必吃名店。", mapUrl: "https://maps.app.goo.gl/2nLpsWUjFZcmLyNf7" }, { name: "伊藤久右衛門 宇治本店", cuisine: "抹茶聖代", hours: "10:00–18:00", note: "抹茶甜點種類豐富。", mapUrl: "https://maps.app.goo.gl/X52bnzuQK4Ftn7oD8" }] }]
+                },
+                {
+                    date: "1/3 (六)",
+                    dining: [{ area: "京都 - 嵐山", spots: [{ name: "嵯峨豆腐 稻 本店", cuisine: "湯豆腐", hours: "11:00–18:30", note: "嵐山名物湯豆腐。", mapUrl: "https://maps.app.goo.gl/BBCfdetuL8rNMevf7" }, { name: "嵐山よしむら", cuisine: "手打蕎麥麵", hours: "11:00–16:00", note: "位於渡月橋畔，可欣賞美景。", mapUrl: "https://maps.app.goo.gl/p47zjGPbRoUSY4Cp8" }, { name: "鯛匠 HANANA", cuisine: "鯛魚茶泡飯", hours: "11:00–16:30", note: "人氣排隊店。", mapUrl: "https://maps.app.goo.gl/5wxGFRvQ2TwzryT48" }] }]
+                }
+            ],
+            // --- 自駕指南與交通號誌說明 ---
+            drivingGuide: {
+                tips: [
+                    { title: "右駕左行", content: "日本車輛為右駕，請務必靠左行駛。口訣：「左轉小彎、右轉大彎」。" },
+                    { title: "行人優先", content: "斑馬線若有行人準備過馬路，車輛「絕對必須」完全停止讓行。" },
+                    { title: "止まれ (Stop)", content: "看到倒三角形的「止まれ」標誌，車輪必須「完全停止」運轉。" },
+                    { title: "右轉禮讓", content: "右轉（跨越對向車道）時，必須禮讓直行車與左轉車。" }
+                ],
+                roadLines: [
+                    { type: "white-dotted", title: "白色虛線", desc: "可變換車道" },
+                    { type: "white-solid", title: "白色實線", desc: "可變換車道 (注意安全)" },
+                    { type: "orange-solid", title: "橘黃色實線", desc: "🚫 禁止變換車道" },
+                    { type: "double-orange", title: "雙橘實線", desc: "⚠️ 嚴禁跨越/迴轉" },
+                    { type: "parking-kei", title: "停車格：軽", desc: "🟡 輕自動車專用" }
+                ],
+                refueling: [
+                    {
+                        type: "self",
+                        title: "自助加油 (Self)",
+                        steps: ["1. 認明「セルフ」招牌。", "2. 選擇支付與油種(紅色 Regular)。", "3. 除靜電。", "4. 加油跳停即可。"]
+                    },
+                    {
+                        type: "manual",
+                        title: "人工加油",
+                        steps: ["1. 駛入車道。", "2. 說：「Regular, Mantan (紅色加滿)」。", "3. 車內付款。"]
+                    },
+                    {
+                        type: "types",
+                        title: "油種辨識",
+                        steps: ["🔴 紅色 Regular：一般汽油。", "🟡 黃色 High Octane：高辛烷值。", "🟢 綠色 Diesel：柴油 (勿加錯)。"]
+                    }
+                ],
+                signs: [
+                    { label: "一時停止", desc: "務必完全煞停", type: "stop" },
+                    { label: "徐行", desc: "減速慢行", type: "slow" },
+                    { label: "車輛進入禁止", desc: "禁止駛入", type: "no-entry" },
+                    { label: "最高速度", desc: "限制最高時速", type: "speed", limit: 50 },
+                    { label: "單行道", desc: "依箭頭方向", type: "one-way" },
+                    { label: "駐車禁止", desc: "禁止停車", type: "no-parking" },
+                    { label: "禁止迴轉", desc: "禁止 U-Turn", type: "no-uturn" },
+                    { label: "指定方向", desc: "僅能直行", type: "only-straight" },
+                    { label: "駐停車禁止", desc: "禁止臨停", type: "no-stopping" },
+                    { label: "禁止超車", desc: "禁止超車", type: "no-overtaking" }
+                ],
+                highway: [
+                    { title: "ETC 車道", content: "建議租用 ETC 卡。進入收費站請走紫色 ETC 車道，減速至 20km/h 通過。" },
+                    { title: "追越車道", content: "最右側為超車道。超車後應儘速切回左側，切勿長時間佔用。" },
+                    { title: "合流禮讓", content: "採取「拉鍊式匯入」（一台插一台）。" },
+                    { title: "車距確認", content: "請依地標保持安全距離。" },
+                    { title: "塞車閃黃燈", content: "若遇塞車急減速，請開「雙黃燈」警示後車。" },
+                    { title: "SA 與 PA", content: "SA 為大型休息站；PA 為小型休息站。建議每2小時休息一次。" }
+                ]
+            }
+        };
+
+        // --- 輔助函數 (Helper Functions) ---
+        const getGoogleMapUrl = (name) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+
+        // ==========================================
+        // --- 2. 狀態管理 (State Management) ---
+        // ==========================================
+        
+        let state = {
+            activeTab: 'itinerary',
+            selectedDayId: 'day1'
+        };
+
+        // ==========================================
+        // --- 3. 組件渲染函數 (Component Renderers) ---
+        // ==========================================
+        
+        const getIcon = (name, classes = "", size = 24) => `<i data-lucide="${name}" class="${classes}" width="${size}" height="${size}"></i>`;
+
+        function renderRoadLine(type) {
+            let content = '';
+            // 根據類型繪製不同的 SVG 線條樣式
+            switch (type) {
+                case 'white-dotted': content = '<line x1="0" y1="20" x2="100%" y2="20" stroke="white" stroke-width="4" stroke-dasharray="12,12" />'; break;
+                case 'white-solid': content = '<line x1="0" y1="20" x2="100%" y2="20" stroke="white" stroke-width="4" />'; break;
+                case 'orange-solid': content = '<line x1="0" y1="20" x2="100%" y2="20" stroke="#f97316" stroke-width="4" />'; break;
+                case 'double-orange': content = '<line x1="0" y1="16" x2="100%" y2="16" stroke="#f97316" stroke-width="3" /><line x1="0" y1="24" x2="100%" y2="24" stroke="#f97316" stroke-width="3" />'; break;
+                case 'parking-kei': content = '<rect x="50%" y="5" width="30" height="30" transform="translate(-15, 0)" fill="none" stroke="#fcd34d" stroke-width="2" /><text x="50%" y="26" text-anchor="middle" fill="#fcd34d" font-size="20" font-weight="bold">軽</text>'; break;
+            }
+            return `<svg width="100%" height="40" class="rounded-md border border-stone-400 bg-zinc-600"><rect width="100%" height="100%" fill="#52525b" />${content}</svg>`;
+        }
+
+        function renderTrafficSign(type, limit) {
+            switch(type) {
+                case 'stop': return `<svg width="80" height="80" viewBox="0 0 80 80"><polygon points="40,76 4,10 76,10" fill="#ef4444" stroke="none"/><text x="50%" y="35%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="18" font-weight="bold">止まれ</text><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="12" font-weight="bold">STOP</text></svg>`;
+                case 'slow': return `<svg width="80" height="80" viewBox="0 0 80 80"><polygon points="40,76 4,10 76,10" fill="white" stroke="#ef4444" stroke-width="6"/><text x="50%" y="35%" dominant-baseline="middle" text-anchor="middle" fill="#1c1917" font-size="20" font-weight="bold">徐行</text><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#1c1917" font-size="10" font-weight="bold">SLOW</text></svg>`;
+                case 'no-entry': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="#ef4444" /><rect x="16" y="34" width="48" height="12" fill="white" /></svg>`;
+                case 'speed': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="white" stroke="#ef4444" stroke-width="6" /><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#3b82f6" font-size="32" font-weight="bold">${limit}</text></svg>`;
+                case 'one-way': return `<svg width="80" height="80" viewBox="0 0 80 80"><rect x="4" y="16" width="72" height="48" rx="4" fill="#3b82f6" /><path d="M26 40 L54 40 M54 40 L42 28 M54 40 L42 52" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+                case 'no-parking': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="#3b82f6" stroke="#ef4444" stroke-width="6" /><line x1="16" y1="16" x2="64" y2="64" stroke="#ef4444" stroke-width="6" /></svg>`;
+                case 'no-uturn': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="white" stroke="#ef4444" stroke-width="6" /><path d="M48 32 C48 24 32 24 32 32 L32 52" stroke="#3b82f6" stroke-width="6" fill="none" /><polygon points="32,56 24,44 40,44" fill="#3b82f6" /><line x1="16" y1="64" x2="64" y2="16" stroke="#ef4444" stroke-width="6" /></svg>`;
+                case 'only-straight': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="#3b82f6" stroke="white" stroke-width="2" /><path d="M40 20 L40 60 M28 32 L40 20 L52 32" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+                case 'no-stopping': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="#3b82f6" stroke="#ef4444" stroke-width="6" /><line x1="20" y1="20" x2="60" y2="60" stroke="#ef4444" stroke-width="6" /><line x1="60" y1="20" x2="20" y2="60" stroke="#ef4444" stroke-width="6" /></svg>`;
+                case 'no-overtaking': return `<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="white" stroke="#ef4444" stroke-width="6" /><text x="50%" y="32" text-anchor="middle" fill="#3b82f6" font-size="20" font-weight="bold">追越</text><text x="50%" y="58" text-anchor="middle" fill="#3b82f6" font-size="20" font-weight="bold">禁止</text></svg>`;
+                default: return '';
+            }
+        }
+
+        const renderWeatherIcon = (type) => {
+            const icons = {
+                'sunny': { name: 'sun', class: 'text-orange-500' },
+                'cloudy': { name: 'cloud', class: 'text-gray-500' },
+                'rain': { name: 'cloud-rain', class: 'text-blue-500' },
+                'snow': { name: 'snowflake', class: 'text-cyan-400' }
+            };
+            const icon = icons[type] || icons['sunny'];
+            return getIcon(icon.name, `w-5 h-5 ${icon.class}`);
+        };
+
+        function renderItineraryItem(item) {
+            let iconName = 'map-pin', iconColor = "text-stone-400", borderColor = "border-stone-200";
+            let isEmoji = false;
+
+            const styles = {
+                food: { icon: 'utensils', color: 'text-red-400', border: 'border-l-red-400' },
+                shop: { icon: 'shopping-bag', color: 'text-yellow-500', border: 'border-l-yellow-500' },
+                visit: { icon: 'camera', color: 'text-emerald-500', border: 'border-l-emerald-500' },
+                shrine: { emoji: true, color: 'text-stone-800', border: 'border-l-rose-600' },
+                hotel: { icon: 'bed-double', color: 'text-purple-400', border: 'border-l-purple-400' },
+                ticket: { icon: 'ticket', color: 'text-indigo-600', border: 'border-l-indigo-600' }
+            };
+
+            if (styles[item.type]) {
+                const s = styles[item.type];
+                if (s.emoji) isEmoji = true; else iconName = s.icon;
+                iconColor = s.color; borderColor = s.border;
+            } else if (item.type === 'transport') {
+                if (item.title.includes("CX564") || item.title.includes("CX565")) { 
+                    iconName = 'plane'; iconColor = "text-red-500"; borderColor = "border-l-red-500"; 
+                } else if (item.mode === 'train') {
+                    iconName = 'train-front'; iconColor = "text-indigo-400"; borderColor = "border-l-indigo-400";
+                } else if (item.mode === 'car' || item.title.includes("租車") || item.title.includes("前往")) {
+                    iconName = 'car'; iconColor = "text-lime-600"; borderColor = "border-l-lime-600";
+                } else if (item.title.includes("公車") || item.title.includes("巴士")) {
+                    iconName = 'bus'; iconColor = "text-teal-600"; borderColor = "border-l-teal-600";
+                } else {
+                    iconName = 'train-front'; iconColor = "text-indigo-400"; borderColor = "border-l-indigo-400";
+                }
+            }
+
+            const isCollection = item.tag === "收集";
+            if (isCollection) { iconName = 'star'; iconColor = "text-amber-500"; borderColor = "border-l-amber-500"; }
+            const isBackup = item.tag === "備用";
+            if (isBackup) { iconName = 'archive'; iconColor = "text-stone-500"; borderColor = "border-l-stone-400"; }
+
+            const showNavigation = item.mapUrl || (!TITLES_WITHOUT_NAVIGATION.includes(item.title) && item.mapUrl !== null);
+            const destinationUrl = item.mapUrl || getGoogleMapUrl(item.title);
+            const videoIcon = item.videoUrl && (item.videoUrl.includes('youtube') || item.videoUrl.includes('youtu.be')) ? 'youtube' : 'video';
+
+            const isTicket = item.type === 'ticket';
+            const bgClass = isTicket ? "bg-indigo-50/50" : "bg-white/95";
+
+            return `
+            <div class="flex gap-4 p-4 ${bgClass} backdrop-blur-sm rounded-lg border-l-4 shadow-sm mb-3 ${borderColor} active:bg-stone-50 transition-colors">
+                <div class="flex flex-col items-center min-w-[50px]">
+                    ${item.time ? `<span class="text-sm font-bold text-stone-600 font-mono">${item.time}</span>` : ''}
+                    <div class="mt-2 p-1.5 rounded-full bg-stone-50 ${iconColor}">
+                        ${isEmoji ? '<span class="text-lg leading-none">⛩️</span>' : getIcon(iconName, "", 18)}
+                    </div>
+                    ${isCollection ? '<span class="text-[9px] text-amber-600 font-bold mt-1">GET!</span>' : ''}
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-start justify-between">
+                        <h3 class="font-bold text-stone-800 text-lg leading-tight w-[calc(100%-70px)] sm:w-[calc(100%-110px)] select-text">${item.title}</h3>
+                        <div class="flex gap-2 shrink-0"> 
+                            ${item.parkingUrl ? `<a href="${item.parkingUrl}" target="_blank" class="p-2 bg-sky-50 text-sky-600 rounded-full active:scale-95 shrink-0">${getIcon('circle-parking', "", 18)}</a>` : ''}
+                            ${item.videoUrl ? `<a href="${item.videoUrl}" target="_blank" class="p-2 bg-red-100 text-red-600 rounded-full active:scale-95 shrink-0">${getIcon(videoIcon, "", 18)}</a>` : ''}
+                            ${item.goshuinUrl ? `<a href="${item.goshuinUrl}" target="_blank" class="p-2 bg-rose-100 text-rose-600 rounded-full active:scale-95 shrink-0">${getIcon('stamp', "", 18)}</a>` : ''}
+                            ${item.busUrl ? `<a href="${item.busUrl}" target="_blank" class="p-2 bg-emerald-100 text-emerald-600 rounded-full active:scale-95 shrink-0">${getIcon('bus', "", 18)}</a>` : ''}
+                            ${item.bookingUrl ? `<a href="${item.bookingUrl}" target="_blank" class="p-2 bg-red-50 text-red-600 rounded-full active:scale-95 shrink-0">${getIcon('circle-alert', "", 18)}</a>` : ''}
+                            ${item.starUrl ? `<a href="${item.starUrl}" target="_blank" class="p-2 bg-amber-50 text-amber-500 rounded-full active:scale-95 shrink-0 border border-amber-100">${getIcon('star', "", 18)}</a>` : ''}
+                            ${showNavigation && !isTicket ? `<a href="${destinationUrl}" target="_blank" class="p-2 bg-blue-50 text-blue-600 rounded-full active:scale-95 shrink-0">${getIcon('navigation', "", 18)}</a>` : ''}
+                        </div>
+                    </div>
+                    ${item.tag ? `<div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full border font-medium mr-2 ${isCollection ? "border-amber-400 text-amber-600 bg-amber-50" : (item.tag === '備案' || item.tag === '備用' ? "border-stone-400 text-stone-500 bg-stone-100" : "border-stone-300 text-stone-500")}">${item.tag}</span></div>` : ''}
+                    ${item.highlight ? `<div class="mt-2 inline-block px-3 py-1 bg-red-50 text-red-600 text-xs rounded-md font-bold select-text">★ ${item.highlight}</div>` : ''}
+                    ${item.note ? `<p class="mt-2 text-sm text-stone-500 leading-relaxed bg-stone-50 p-2 rounded border border-stone-100 select-text">${item.note}</p>` : ''}
+                </div>
+            </div>`;
+        }
+
+        function renderItineraryView(dayId) {
+            const currentDayData = TRIP_DATA.itinerary.find(d => d.id === dayId);
+            if (!currentDayData) return '';
+
+            const headerStatus = document.getElementById('header-status');
+            headerStatus.innerHTML = `${renderWeatherIcon(currentDayData.weather)}<span class="text-sm font-bold text-stone-600">${currentDayData.temp}</span><span class="text-xs text-stone-400 pl-1 border-l border-stone-300 ml-1">${currentDayData.location}</span>`;
+            headerStatus.classList.remove('hidden');
+
+            return `
+                <div class="animate-fade-in-up pb-20">
+                    <div class="flex items-center justify-between mb-4 px-1">
+                        <h2 class="text-lg font-bold text-stone-700">Day ${dayId.replace('day', '')} <span class="ml-2 text-sm font-normal text-stone-500">${currentDayData.location}</span></h2>
+                    </div>
+                    ${currentDayData.items.map(item => renderItineraryItem(item)).join('')}
+                </div>
+            `;
+        }
+
+        function renderFlightsView() {
+            const flightsHtml = TRIP_DATA.flights.map(flight => `
+                <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-5 mb-4">
+                    <div class="flex items-center justify-between mb-4 border-b border-stone-100 pb-3">
+                        <span class="text-xs font-bold px-2 py-1 rounded ${flight.type === 'Departure' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}">${flight.type === 'Departure' ? '去程' : '回程'}</span>
+                        <span class="font-mono font-bold text-stone-500">${flight.date}</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <div class="flex items-center gap-3">
+                            <div class="text-3xl font-black text-stone-800">${flight.code}</div>
+                            ${flight.flightUrl ? `<a href="${flight.flightUrl}" target="_blank" class="p-1.5 bg-sky-50 text-sky-600 rounded-full active:scale-95 transition-transform">${getIcon('circle-alert', "", 18)}</a>` : ''}
+                        </div>
+                        <div class="text-stone-300 rotate-45">${getIcon('plane', "", 24)}</div>
+                    </div>
+                    <div class="text-sm font-medium text-stone-600 mb-4">${flight.airline} • ${flight.class}</div>
+                    <div class="bg-stone-50 p-4 rounded-lg text-center border border-stone-100">
+                        <div class="text-lg font-bold text-stone-800 mb-1">${flight.route}</div>
+                        <div class="text-xs text-stone-500">${flight.terminal} • ${flight.duration} • ${flight.aircraft}</div>
+                    </div>
+                    ${flight.seatNotes ? `
+                    <div class="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-100 text-xs text-orange-800">
+                        <div class="font-bold mb-1 flex items-center gap-1">${getIcon('triangle-alert', "w-3 h-3")} 無景觀座位提示：</div>
+                        <ul class="list-disc list-inside space-y-0.5 opacity-90">
+                            ${flight.seatNotes.map(n => `<li>${n}</li>`).join('')}
+                        </ul>
+                        ${flight.seatUrl ? `<a href="${flight.seatUrl}" target="_blank" class="block mt-2 text-orange-600 underline hover:text-orange-800">資料來源：Cathay Pacific</a>` : ''}
+                    </div>` : ''}
+                </div>`).join('');
+
+            const hotelsHtml = TRIP_DATA.hotels.map(hotel => `
+                <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-0 mb-4">
+                    <div class="h-60 bg-stone-200 relative overflow-hidden">
+                        ${hotel.image ? `<img src="${hotel.image}" alt="${hotel.name}" class="w-full h-full object-cover">` : `<div class="w-full h-full bg-gradient-to-r from-stone-200 to-stone-300 flex items-center justify-center">${getIcon('bed-double', "text-white w-10 h-10 opacity-50")}</div>`}
+                    </div>
+                    <div class="p-5">
+                        <div class="flex justify-between items-start mb-2"><h3 class="text-lg font-bold text-stone-800 leading-tight w-3/4">${hotel.name}</h3><span class="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded font-medium whitespace-nowrap">${hotel.dates}</span></div>
+                        <p class="text-xs text-stone-400 mb-4 font-mono">${hotel.engName}</p>
+                        <div class="flex items-start gap-2 mb-4 text-sm text-stone-600">${getIcon('map-pin', "mt-0.5 text-stone-400 shrink-0", 16)}<span>${hotel.location}</span></div>
+                        <div class="flex flex-wrap gap-2 mb-4">${hotel.features.map(f => `<span class="text-[10px] px-2 py-1 bg-indigo-50 text-indigo-600 rounded">${f}</span>`).join('')}</div>
+                        <div class="bg-amber-50 p-3 rounded text-xs text-amber-800 border border-amber-100 flex gap-2">${getIcon('info', "shrink-0 mt-0.5", 14)}${hotel.note}</div>
+                        <a href="${hotel.mapUrl || getGoogleMapUrl(hotel.name)}" target="_blank" class="mt-4 block w-full py-3 bg-stone-800 text-white text-center rounded-lg text-sm font-bold active:bg-stone-900 transition active:scale-[0.98]">導航至飯店</a>
+                    </div>
+                </div>`).join('');
+
+            return `<div class="space-y-4 animate-fade-in pb-20"><h2 class="text-xl font-bold text-stone-800 px-1">航班資訊</h2>${flightsHtml}<h2 class="text-xl font-bold text-stone-800 px-1 mt-8 pt-4 border-t border-stone-300/50">住宿資訊</h2>${hotelsHtml}</div>`;
+        }
+
+        function renderDrivingView() {
+            const createSection = (data, renderFn, title, iconClass, borderClass) => `
+                <div><h3 class="text-lg font-bold text-stone-700 mb-3 px-1 border-l-4 ${borderClass} pl-2">${title}</h3><div class="space-y-3">${data.map(renderFn).join('')}</div></div>`;
+
+            const tipsHtml = TRIP_DATA.drivingGuide.tips.map(tip => `
+                <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-4 border-l-4 border-l-lime-500">
+                    <h3 class="font-bold text-lime-800 mb-1 flex items-center gap-2">${getIcon('triangle-alert', "text-lime-600", 18)}${tip.title}</h3>
+                    <p class="text-sm text-stone-600 leading-relaxed">${tip.content}</p>
+                </div>`).join('');
+            
+            return `
+                <div class="space-y-6 animate-fade-in pb-20">
+                    <h2 class="text-xl font-bold text-stone-800 px-1 flex items-center gap-2">${getIcon('car', "text-lime-600", 24)}日本自駕注意事項</h2>
+                    <div class="mb-2"><img src="car.jpg" alt="Driving Visual Guide" class="w-full h-auto rounded-xl"></div>
+                    <div class="space-y-3">${tipsHtml}</div>
+                    <div><h3 class="text-lg font-bold text-stone-700 mb-3 px-1 border-l-4 border-stone-400 pl-2">常用交通號誌</h3><div class="grid grid-cols-2 gap-3">${TRIP_DATA.drivingGuide.signs.map(sign => `<div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-3 flex flex-col items-center text-center"><div class="mb-2 drop-shadow-sm">${renderTrafficSign(sign.type, sign.limit)}</div><div class="text-sm font-bold text-stone-800 mb-1">${sign.label}</div><div class="text-[10px] text-stone-500 leading-tight">${sign.desc}</div></div>`).join('')}</div></div>
+                    ${createSection(TRIP_DATA.drivingGuide.highway, tip => `<div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-4 border-l-4 border-l-indigo-500 bg-indigo-50/30"><h3 class="font-bold text-indigo-900 mb-1 flex items-center gap-2">${getIcon('car', "text-indigo-600", 16)}${tip.title}</h3><p class="text-sm text-stone-600 leading-relaxed">${tip.content}</p></div>`, "高速公路行駛指南", "", "border-indigo-400")}
+                    ${createSection(TRIP_DATA.drivingGuide.roadLines, line => `<div class="flex items-center gap-3 bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 p-3"><div class="w-16 shrink-0 shadow-inner rounded overflow-hidden">${renderRoadLine(line.type)}</div><div><div class="font-bold text-stone-800 text-sm">${line.title}</div><div class="text-[10px] text-stone-500">${line.desc}</div></div></div>`, "道路標線辨識", "", "border-orange-400")}
+                    ${createSection(TRIP_DATA.drivingGuide.refueling, item => `<div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-4 border-l-4 ${item.type === 'types' ? 'border-l-red-500 bg-red-50/20' : 'border-l-sky-500'}"><h3 class="font-bold ${item.type === 'types' ? 'text-red-700' : 'text-sky-800'} mb-2 flex items-center gap-2">${getIcon(item.type === 'types' ? 'fuel' : 'droplet', "", 18)}${item.title}</h3><ul class="text-sm text-stone-600 leading-relaxed space-y-1 list-disc list-inside pl-1">${item.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>`, "加油站使用指南", "", "border-sky-400")}
+                </div>`;
+        }
+        
+        function renderManholeView() {
+            const renderTable = (data) => {
+                const rowsHtml = data.map(item => `
+                    <tr class="hover:bg-indigo-50/50 transition-colors">
+                        <td class="px-2 py-3 whitespace-nowrap text-lg font-medium text-stone-900" style="font-family: 'Microsoft JhengHei', 'Heiti TC', sans-serif;">${item.region}</td>
+                        <td class="px-2 py-3">
+                            <a href="${item.url}" target="_blank" rel="noopener noreferrer" 
+                               class="text-lg font-bold block ${item.textColor ? item.textColor : (item.highlight ? 'text-red-600' : 'text-indigo-600')}"
+                               style="font-family: 'Microsoft JhengHei', 'Heiti TC', sans-serif;">
+                                ${item.name}
+                            </a>
+                        </td>
+                        <td class="px-2 py-3 whitespace-nowrap text-base text-emerald-600 font-bold">${item.hours}</td>
+                    </tr>
+                `).join('');
+
+                return `
+                    <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-0">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-stone-200">
+                                <thead class="bg-stone-50 sticky top-0">
+                                    <tr><th class="px-2 py-3 text-left text-sm font-semibold text-stone-600 whitespace-nowrap w-[1%]">地區</th><th class="px-2 py-3 text-left text-sm font-semibold text-stone-600">地點</th><th class="px-2 py-3 text-left text-sm font-semibold text-stone-600 whitespace-nowrap w-[1%]">時間</th></tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-stone-100">${rowsHtml}</tbody>
+                            </table>
+                        </div>
+                    </div>`;
+            };
+
+            return `
+                <div class="animate-fade-in space-y-4 pb-20">
+                    <h2 class="text-xl font-bold text-stone-800 px-1 flex items-center gap-2">${getIcon('credit-card', "text-amber-500", 24)}マンホールカード 在庫状況</h2>
+                    ${renderTable(TRIP_DATA.manholeStock)}
+
+                    <h3 class="text-lg font-bold text-stone-700 px-1 mt-6 mb-2 flex items-center gap-2 border-t border-stone-300/50 pt-6">
+                        ${getIcon('plus-circle', "text-indigo-500", 20)} 追加地點
+                    </h3>
+                    ${renderTable(TRIP_DATA.manholeStockExtra)}
+
+                    <h3 class="text-lg font-bold text-stone-700 px-1 mt-6 mb-2 flex items-center gap-2 border-t border-stone-300/50 pt-6">
+                        ${getIcon('archive', "text-stone-500", 20)} 備用地點
+                    </h3>
+                    ${renderTable(TRIP_DATA.manholeStockBackup)}
+
+                    <div class="mt-6 p-4 bg-stone-100 rounded-lg border border-stone-200 text-sm text-stone-600">
+                        <h4 class="font-bold mb-2 text-stone-700">備註：曜日對照</h4>
+                        <ul class="space-y-1 font-mono">
+                            <li>星期一：月曜日（げつようび）</li>
+                            <li>星期二：火曜日（かようび）</li>
+                            <li>星期三：水曜日（すいようび）</li>
+                            <li>星期四：木曜日（もくようび）</li>
+                            <li>星期五：金曜日（きんようび）</li>
+                            <li>星期六：土曜日（どようび）</li>
+                            <li>星期日：日曜日（にちようび）</li>
+                        </ul>
+                    </div>
+                </div>`;
+        }
+        
+        function renderMapView() {
+            const linksHtml = TRIP_DATA.mapLinks.map(link => `
+                <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between p-4 bg-white/95 backdrop-blur-sm border border-stone-200 rounded-xl shadow-sm active:bg-stone-50 transition-colors">
+                    <div class="flex items-center gap-3"><div class="p-2 bg-emerald-100 text-emerald-600 rounded-full">${getIcon('map', "", 20)}</div><span class="text-lg font-bold text-stone-700">${link.title}</span></div>${getIcon('external-link', "text-stone-400", 18)}
+                </a>`).join('');
+            return `<div class="space-y-4 animate-fade-in pb-20"><h2 class="text-xl font-bold text-stone-800 px-1 flex items-center gap-2">${getIcon('map', "text-emerald-600", 24)}地圖與相關連結</h2><div class="space-y-3">${linksHtml}</div></div>`;
+        }
+
+        function renderNotesView() {
+            const daysHtml = TRIP_DATA.notes.map(day => {
+                let content = '';
+                if (day.links) content += `<div class="space-y-2">${day.links.map(link => `<a href="${link.url}" target="_blank" class="flex items-center justify-between p-3 bg-white border border-indigo-100 rounded-lg shadow-sm active:bg-indigo-50"><div class="flex flex-col"><span class="text-base text-indigo-700 font-bold flex items-center gap-2">${link.title}${getIcon('external-link', "opacity-50", 14)}</span>${link.note ? `<span class="text-xs text-stone-500 mt-0.5">${link.note}</span>` : ''}</div></a>`).join('')}</div>`;
+                if (day.dining) content += `<div class="bg-orange-50/50 rounded-lg p-3 border border-orange-100 mt-4"><h4 class="text-sm font-bold text-orange-600 mb-2 uppercase tracking-wide flex items-center gap-1">${getIcon('utensils', "", 12)} 餐飲資訊</h4>${day.dining.map(areaGroup => `<div class="mb-4 last:mb-0"><div class="text-xs font-bold text-stone-500 mb-1 border-b border-orange-200 inline-block">${areaGroup.area}</div><ul class="space-y-2 pl-2">${areaGroup.spots.map(spot => `<li class="flex justify-between items-center text-sm"><div class="flex flex-col"><div class="flex items-center gap-2"><span class="text-base text-stone-800 font-bold">${spot.name}</span>${spot.cuisine ? `<span class="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-md font-bold">${spot.cuisine}</span>` : ''}</div><span class="text-[10px] font-mono text-stone-500 mt-0.5">${spot.hours}</span>${spot.note ? `<span class="text-sm text-stone-600 mt-1 leading-relaxed">${spot.note}</span>` : ''}</div><a href="${spot.mapUrl || getGoogleMapUrl(spot.name)}" target="_blank" class="p-2 bg-blue-50 text-blue-600 rounded-full active:scale-95 shrink-0">${getIcon('navigation', "", 16)}</a></li>`).join('')}</ul></div>`).join('')}</div>`;
+                if (day.routes) content += `<div class="space-y-4 mt-4">${day.routes.map(route => `<div class="bg-sky-50 rounded-lg p-3 border border-sky-100"><h4 class="text-base font-bold text-sky-800 mb-2 flex items-center gap-2">${getIcon('map-pin', "", 14)} ${route.area}</h4><ul class="space-y-2 relative pl-4 border-l-2 border-sky-200 ml-1">${route.spots.map(spot => `<li class="relative flex justify-between items-start"><div class="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-sky-300"></div><div class="flex-1 pr-2"><div class="flex items-center gap-2"><div class="text-base font-bold text-stone-700">${spot.name}</div>${spot.cuisine ? `<span class="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-md font-bold">${spot.cuisine}</span>` : ''}</div><div class="text-[10px] text-stone-500 font-mono mt-0.5">${spot.hours}</div>${spot.note ? `<div class="text-sm text-stone-600 mt-1 leading-relaxed">${spot.note}</div>` : ''}</div><a href="${spot.mapUrl || getGoogleMapUrl(spot.name)}" target="_blank" class="p-2 bg-blue-50 text-blue-600 rounded-full active:scale-95 shrink-0">${getIcon('navigation', "", 16)}</a></li>`).join('')}</ul></div>`).join('')}</div>`;
+                return `<div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-stone-200 overflow-hidden p-0 border-l-4 border-l-pink-400"><div class="bg-stone-50 px-4 py-2 border-b border-stone-100"><h3 class="font-bold text-stone-800">${day.date}</h3></div><div class="p-4 space-y-4">${content}</div></div>`;
+            }).join('');
+            return `<div class="space-y-6 animate-fade-in pb-20"><h2 class="text-xl font-bold text-stone-800 px-1 flex items-center gap-2">${getIcon('notebook-pen', "text-pink-500", 24)}行程備註</h2>${daysHtml}</div>`;
+        }
+
+        function renderFooter() {
+            return `<div class="text-center pt-8 pb-4 opacity-80 mb-16"><div class="border-t border-stone-400/30 pt-2 px-4 inline-flex items-baseline gap-2"><span class="text-sm text-stone-500 font-medium tracking-wider">Created by</span><span class="text-4xl text-stone-600" style="font-family: 'Dancing Script', cursive">Wen</span></div></div>`;
+        }
+
+        // ==========================================
+        // --- 4. 主控制邏輯 (Main Controller) ---
+        // ==========================================
+        
+        function updateView() {
+            const mainContent = document.getElementById('main-content');
+            const scrollerContainer = document.getElementById('date-scroller-container');
+            const headerStatus = document.getElementById('header-status');
+
+            mainContent.scrollTop = 0;
+            let contentHtml = '';
+            
+            scrollerContainer.classList.add('hidden');
+            headerStatus.classList.add('hidden');
+
+            const views = {
+                itinerary: () => { 
+                    contentHtml = renderItineraryView(state.selectedDayId); 
+                    scrollerContainer.classList.remove('hidden'); 
+                    updateDateScroller(); 
+                },
+                flights: () => contentHtml = renderFlightsView(),
+                driving: () => contentHtml = renderDrivingView(),
+                manhole: () => contentHtml = renderManholeView(),
+                map: () => contentHtml = renderMapView(),
+                notes: () => contentHtml = renderNotesView()
+            };
+
+            (views[state.activeTab] || views['itinerary'])();
+            
+            mainContent.innerHTML = contentHtml + renderFooter();
+            updateBottomNav();
+            
+            lucide.createIcons();
+        }
+
+        function updateDateScroller() {
+            const scroller = document.getElementById('date-scroller');
+            scroller.innerHTML = TRIP_DATA.itinerary.map(day => {
+                const isActive = state.selectedDayId === day.id;
+                const activeClasses = isActive ? "bg-indigo-600/90 backdrop-blur border-indigo-600 text-white shadow-lg shadow-indigo-200" : "bg-white/60 backdrop-blur border-stone-200 text-stone-400";
+                return `<button onclick="switchDay('${day.id}')" id="btn-${day.id}" class="flex-shrink-0 snap-center flex flex-col items-center justify-center w-14 h-16 rounded-xl border transition-all duration-300 active:scale-95 ${activeClasses}"><span class="text-[10px] font-medium uppercase leading-none mb-1">${day.date}</span><span class="text-lg font-black leading-none">${day.dayOfWeek}</span></button>`;
+            }).join('');
+            
+            setTimeout(() => {
+                const selectedBtn = document.getElementById(`btn-${state.selectedDayId}`);
+                if (selectedBtn) selectedBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }, 50);
+        }
+
+        function updateBottomNav() {
+            const nav = document.getElementById('bottom-nav');
+            const tabs = [
+                { id: 'itinerary', label: '行程', icon: 'calendar' },
+                { id: 'flights', label: '航班/住宿', icon: 'plane' },
+                { id: 'driving', label: '自駕', icon: 'car', color: 'text-lime-600' },
+                { id: 'manhole', label: '在庫状況', icon: 'credit-card', sub: 'scale-90' },
+                { id: 'map', label: '地圖', icon: 'map', color: 'text-emerald-600' },
+                { id: 'notes', label: '備註', icon: 'notebook-pen', color: 'text-pink-600' }
+            ];
+            
+            nav.innerHTML = tabs.map(tab => {
+                const isActive = state.activeTab === tab.id;
+                const color = (tab.color && isActive) ? tab.color : (isActive ? 'text-indigo-600' : 'text-stone-400');
+                return `<button onclick="switchTab('${tab.id}')" class="flex flex-col items-center justify-center w-14 h-full space-y-1 active:bg-stone-50 transition-colors ${color}">${getIcon(tab.icon, "", 20)}<span class="text-[9px] font-medium ${tab.sub || ''}">${tab.label}</span></button>`;
+            }).join('');
+        }
+
+        // ==========================================
+        // --- 5. 事件處理 (Event Handlers) ---
+        // ==========================================
+        
+        function switchTab(tabId) { state.activeTab = tabId; updateView(); }
+
+        function switchDay(dayId) { state.selectedDayId = dayId; updateView(); }
+
+        // ==========================================
+        // --- 6. 初始化 (Initialization) ---
+        // ==========================================
+        
+        document.addEventListener('DOMContentLoaded', updateView);
+    </script>
+</body>
+</html>
